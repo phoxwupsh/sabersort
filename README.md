@@ -1,21 +1,28 @@
 # Sabersort
 
-## 這是做甚麼用的？
+## 這是做什麼用的？
 
 Sabersort會將你的圖片，逐個透過[二次元画像詳細検索](https://ascii2d.net/)進行以圖片搜尋，並找到相似的圖片，藉此尋找該圖片的原創作者。Sabersort會自動將圖片的來源(通常是來自[Twitter](https://twitter.com)或[Pixiv](https://pixiv.net))儲存至指定的資料夾，並按照圖片或推文的ID、作者的ID或作者暱稱等資訊命名。資料庫功能會避免儲存到同樣的圖片，換而言之，Sabersort也能排除相同的圖片。
 
 ## 使用前要準備什麼？
 
-- [Python 3.10](https://www.python.org/) 或以上的版本
-- Beautiful Soup 4.11.1 (使用``pip install beautifulsoup4``安裝)
-- ImageHash 4.3.1 (使用``pip install ImageHash``安裝)
-- Pillow 9.2.0 (使用``pip install Pillow``安裝)
-- requests 2.28.1 (使用``pip install requests``安裝)
-- requests_toolbelt 0.10.0 或以上的版本 (使用``pip install requests_toolbelt``安裝)
+先安裝Python，用Windows的話記得安裝時要選PATH的選項。
+
+- [Python 3.10](https://www.python.org/downloads/release/python-3108/) 或以上的版本
+
+以下是需要的程式庫，除了Google Chrome之外，你可以直接使用這個指令來安裝它們
+
+    pip install -r requirements.txt
+
 - [Google Chrome](https://www.google.com/chrome/)
-- Selenium 4.5.0 (使用``pip install selenium``安裝)
-- Webdriver Manager 3.8.4 (使用``pip install webdriver_manager``安裝)
-- packaging 21.3 (使用``pip install packaging``安裝)
+- Beautiful Soup 4.11.1
+- ImageHash 4.3.1
+- Pillow 9.2.0
+- requests 2.28.1
+- requests_toolbelt 0.10.0
+- Selenium 4.5.0
+- Webdriver Manager 3.8.4
+- packaging 21.3
 
 以上都準備好時，打開``config.ini``，你會看到：
 
@@ -90,7 +97,14 @@ Sabersort會將你的圖片，逐個透過[二次元画像詳細検索](https://
 
 上面的設定填好存檔後，直接在終端機輸入：
 
-````python sabersort.py````
+    python sabersort.py
+
+## 專案進度
+
+- [x] 重寫整個Sabersort(對的這是新版)
+- [ ] log紀錄檔
+- [ ] 圖形化使用者介面
+- [ ] 其他以圖搜圖網站的支援(例如iqdb)
 
 ## 關於為什麼我要寫Sabersort
 
