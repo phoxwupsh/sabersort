@@ -29,6 +29,7 @@ Sabersort會將你的圖片，逐個透過[二次元画像詳細検索](https://
     [sabersort]
     Input directory = 
     Output directory = 
+    Not found directory = 
     Exception directory = 
     Filename = {origin}-{author_id}-{id}
     Threshold = 10
@@ -48,7 +49,6 @@ Sabersort會將你的圖片，逐個透過[二次元画像詳細検索](https://
 
     [pixiv]
     PHPSESSID = 
-    device_token = 
 
     [twitter]
     auth_token = 
