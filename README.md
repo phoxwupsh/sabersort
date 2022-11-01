@@ -55,8 +55,9 @@ Sabersort會將你的圖片，逐個透過[二次元画像詳細検索](https://
 
 + ``[sabersort]``
     + ``Input directory``：填放著需要搜尋的圖片所在的資料夾，資料夾裡面建議只放圖片。
-    + ``Output directory``：填要放下載下來的圖片的資料夾。
-    + ``Exception directory``：填要找不到的圖片的資料夾，雖然沒找到不會下載任何東西，但會把檔案複製過去。
+    + ``Found directory``：填要放下載下來的圖片的資料夾。
+    + ``Not found directory``：填要找不到的圖片的資料夾，會把檔案複製過去。
+    + ``Exception directory``：填要找到了但有問題的圖片的資料夾，會把檔案複製過去，並按照已知的資訊命名；這種狀況通常發生在有找到但原作者刪文。
     + ``Filename``是檔名，你有以下標籤可以使用：
         + ``{origin}``：從哪裡下載的
         + ``{author}``：作者的名字，因為有些作者可能會用一些奇奇怪怪的字元當名字，你的系統不一定會支援，斟酌使用。
@@ -89,7 +90,6 @@ Sabersort會將你的圖片，逐個透過[二次元画像詳細検索](https://
     + ``First``：只搜尋前幾個結果，0代表不限制，要設定的話建議在``3``到``6``，太高沒意義，太低會找不出來。
 + ``[pixiv]``
     + ``PHPSESSID``：把Pixiv的cookies複製到這裡，不知道怎麼找可以看[這裡](https://www.minwt.com/webdesign-dev/html/18437.html)，進入Pixiv網站後，它會在``pixiv.net``底下。
-    + ``device_token``：同上，一樣是cookies。
 + ``[twitter]``
     + ``auth_token``：一樣是cookies，只是要進去Twitter網站，它會在``twitter.com``底下。
 
