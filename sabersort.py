@@ -72,16 +72,16 @@ class Sabersort():
         if select is None:
             self.__not_found_handler(src_img_path)
             return
-        self.__found_handler(src_hash, select)
+        self.__found_handler(src_img_path, src_hash, select)
 
-    def __found_handler(self, src_hash:ImageHash, target: Ascii2dResult):
+    def __found_handler(self, src_img_path:str, src_hash:ImageHash, target: Ascii2dResult):
         match target.origin:
             case Origin.Pixiv:
-                self.__pixiv_handler(src_hash, target)
+                self.__pixiv_handler(src_img_path, src_hash, target)
             case Origin.Twitter:
-                self.__twitter_handler(src_hash, target)
+                self.__twitter_handler(src_img_path, src_hash, target)
                 
-    def __pixiv_handler(self, src_hash:ImageHash, target:Ascii2dResult):
+    def __pixiv_handler(self, src_img_path:str, src_hash:ImageHash, target:Ascii2dResult):
         try:
             id = urlparse(target.orig_link).path.split('/')[-1]
             urls = self.pixiv.get_urls(id)
@@ -89,11 +89,9 @@ class Sabersort():
             if urls.page > 1:
                 select, index = self.__match_pixiv_result(src_hash, urls)
                 target.index = index
-            file_name = self.__get_filename(target)
-            file_path = os.path.join(self.config.dist_dir, file_name)
-            self.__finally_handler(select, file_path, target)
+            self.__finally_handler(select, target)
         except PixivDeletedError:
-            self.__pixiv_deleted_handler()
+            self.__deleted_handler(src_img_path, target)
 
     def __match_pixiv_result(self, target_hash:ImageHash, results:PixivUrls) -> tuple[str, int]:
         select = None
@@ -109,20 +107,15 @@ class Sabersort():
                             index = i
                             break
         return select, index
-    
-    def __pixiv_deleted_handler(self, ):
-        pass
 
-    def __twitter_handler(self, src_hash:ImageHash, target: Ascii2dResult):
+    def __twitter_handler(self, src_img_path:str, src_hash:ImageHash, target: Ascii2dResult):
         try:
             urls = self.twitter.get_img_url(target.orig_link)
             select, index = self.__match_twitter_result(src_hash ,urls)
             target.index = index
-            file_name = self.__get_filename(target)
-            file_path = os.path.join(self.config.dist_dir, file_name)
-            self.__finally_handler(select.orig, file_path, target)
+            self.__finally_handler(select.orig, target)
         except TwitterDeletedError:
-            self.__twitter_deleted_handler()
+            self.__deleted_handler(src_img_path, target)
 
     def __match_twitter_result(self, target_hash:ImageHash, result_urls:list[str]) -> tuple[TwitterUrls, int]:
         select = None
@@ -139,10 +132,14 @@ class Sabersort():
                         index += 1
         return parse_twitter_url(select), index
     
-    def __twitter_deleted_handler(self, ):
-        pass
+    def __deleted_handler(self, src_img_path:str, result:Ascii2dResult):
+        file_name = self.__get_filename(result)
+        file_path = os.path.join(self.config.except_dir, file_name)
+        copy(src_img_path, file_path)
     
-    def __finally_handler(self, finally_url:str, file_path:str, target:Ascii2dResult):
+    def __finally_handler(self, finally_url:str, target:Ascii2dResult):
+        file_name = self.__get_filename(target)
+        file_path = os.path.join(self.config.dist_dir, file_name)
         req = None
         match target.origin:
             case Origin.Twitter:
@@ -163,7 +160,7 @@ class Sabersort():
         return get(url, headers={'user-agent': self.config.user_agent})
 
     def __not_found_handler(self, src_img_path: str):
-        copy(src_img_path, self.config.except_dir)
+        copy(src_img_path, self.config.not_found_dir)
 
     def __is_identical(self, src_hash: ImageHash, target_hash:ImageHash) -> bool:
         return self.__get_bias(src_hash, target_hash) <= self.config.threshold
@@ -214,9 +211,10 @@ class Sabersort():
         return f'{self.config.filename_fmt.format_map(fd)}.{target.extension}'
 
 class SabersortConfig:
-    def __init__(self, src_dir:str, dist_dir:str, except_dir:str, filename_fmt: str, threads:int=1, threshold: int = 0, user_agent: str = None, chunk_size:int = 4096) -> None:
+    def __init__(self, src_dir:str, dist_dir:str, not_found_dir:str, except_dir:str, filename_fmt: str, threads:int=1, threshold: int = 0, user_agent: str = None, chunk_size:int = 4096) -> None:
         self.src_dir = src_dir
         self.dist_dir = dist_dir
+        self.not_found_dir = not_found_dir
         self.except_dir = except_dir
         self.filename_fmt = filename_fmt
         self.threads = threads if threads > 0 else cpu_count()
@@ -249,7 +247,7 @@ if __name__ == '__main__':
         with open('config.ini', 'w+') as cf:
             config.write(cf)
     if not 'sabersort' in sections:
-        config['sabersort'] = {'Input directory': '', 'Output directory':'', 'Exception directory':'', 'Filename': '{origin}-{author_id}-{id}', 'Threshold': '10', 'Thread': '3', 'User-agent': ''}
+        config['sabersort'] = {'Input directory': '', 'Found directory':'', 'Not found directory':'', 'Exception directory':'', 'Filename': '{origin}-{author_id}-{id}', 'Threshold': '10', 'Thread': '3', 'User-agent': ''}
         with open('config.ini', 'w+') as cf:
             config.write(cf)
     if not 'saberdb' in sections:
@@ -270,13 +268,14 @@ if __name__ == '__main__':
             config.write(cf)
     
     in_dir = config.get('sabersort', 'Input directory')
-    out_dir = config.get('sabersort', 'Output directory')
+    out_dir = config.get('sabersort', 'Found directory')
+    nf_dir = config.get('sabersort', 'Not found directory')
     exc_dir = config.get('sabersort', 'Exception directory')
     fmt = config.get('sabersort', 'Filename')
     threshold = int(config.get('sabersort', 'Threshold'))
     threads = int(config.get('sabersort', 'Thread'))
     user_agent = config.get('sabersort', 'User-agent')
-    sabersort_cfg = SabersortConfig(in_dir, out_dir, exc_dir, fmt, threads, threshold, user_agent)
+    sabersort_cfg = SabersortConfig(in_dir, out_dir, nf_dir, exc_dir, fmt, threads, threshold, user_agent)
 
     db_path = config.get('saberdb', 'Database path')
     check_db = bool(config.get('saberdb', 'Check database'))
