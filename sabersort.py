@@ -11,8 +11,8 @@ from saberdb.hasher import Hasher, HashAlg
 from ascii2d import Ascii2d, Ascii2dConfig, Ascii2dResult, Origin, SortOrder
 from glob import glob
 from utils import split_list
-from origins.pixiv import Pixiv, PixivConfig, PixivUrls, get_pixiv_page
-from origins.twitter import Twitter, TwitterConfig, TwitterUrls, parse_twitter_url
+from origins.pixiv import Pixiv, PixivConfig, PixivDeletedError, PixivUrls, get_pixiv_page
+from origins.twitter import Twitter, TwitterConfig, TwitterUrls, parse_twitter_url, TwitterDeletedError
 from requests import Response, get
 import os.path
 from configparser import RawConfigParser
@@ -82,15 +82,18 @@ class Sabersort():
                 self.__twitter_handler(src_hash, target)
                 
     def __pixiv_handler(self, src_hash:ImageHash, target:Ascii2dResult):
-        id = urlparse(target.orig_link).path.split('/')[-1]
-        urls = self.pixiv.get_urls(id)
-        select = urls.original
-        if urls.page > 1:
-            select, index = self.__match_pixiv_result(src_hash, urls)
-            target.index = index
-        file_name = self.__get_filename(target)
-        file_path = os.path.join(self.config.dist_dir, file_name)
-        self.__finally_handler(select, file_path, target)
+        try:
+            id = urlparse(target.orig_link).path.split('/')[-1]
+            urls = self.pixiv.get_urls(id)
+            select = urls.original
+            if urls.page > 1:
+                select, index = self.__match_pixiv_result(src_hash, urls)
+                target.index = index
+            file_name = self.__get_filename(target)
+            file_path = os.path.join(self.config.dist_dir, file_name)
+            self.__finally_handler(select, file_path, target)
+        except PixivDeletedError:
+            self.__pixiv_deleted_handler()
 
     def __match_pixiv_result(self, target_hash:ImageHash, results:PixivUrls) -> tuple[str, int]:
         select = None
@@ -106,14 +109,20 @@ class Sabersort():
                             index = i
                             break
         return select, index
+    
+    def __pixiv_deleted_handler(self, ):
+        pass
 
     def __twitter_handler(self, src_hash:ImageHash, target: Ascii2dResult):
-        urls = self.twitter.get_img_url(target.orig_link)
-        select, index = self.__match_twitter_result(src_hash ,urls)
-        target.index = index
-        file_name = self.__get_filename(target)
-        file_path = os.path.join(self.config.dist_dir, file_name)
-        self.__finally_handler(select.orig, file_path, target)
+        try:
+            urls = self.twitter.get_img_url(target.orig_link)
+            select, index = self.__match_twitter_result(src_hash ,urls)
+            target.index = index
+            file_name = self.__get_filename(target)
+            file_path = os.path.join(self.config.dist_dir, file_name)
+            self.__finally_handler(select.orig, file_path, target)
+        except TwitterDeletedError:
+            self.__twitter_deleted_handler()
 
     def __match_twitter_result(self, target_hash:ImageHash, result_urls:list[str]) -> tuple[TwitterUrls, int]:
         select = None
@@ -129,6 +138,9 @@ class Sabersort():
                             break
                         index += 1
         return parse_twitter_url(select), index
+    
+    def __twitter_deleted_handler(self, ):
+        pass
     
     def __finally_handler(self, finally_url:str, file_path:str, target:Ascii2dResult):
         req = None
@@ -249,7 +261,7 @@ if __name__ == '__main__':
         with open('config.ini', 'w+') as cf:
             config.write(cf)
     if not 'pixiv' in sections:
-        config['pixiv'] = {'PHPSESSID': '', 'device_token': ''}
+        config['pixiv'] = {'PHPSESSID': ''}
         with open('config.ini', 'w+') as cf:
             config.write(cf)
     if not 'twitter' in sections:
@@ -304,8 +316,7 @@ if __name__ == '__main__':
     ascii2d_cfg = Ascii2dConfig(user_agent, sort_order, first, prefered)
 
     phpsessid = config.get('pixiv', 'PHPSESSID')
-    device_token = config.get('pixiv', 'device_token')
-    pixiv_cfg = PixivConfig(phpsessid, device_token,user_agent)
+    pixiv_cfg = PixivConfig(phpsessid,user_agent)
 
     auth_token = config.get('twitter', 'auth_token')
     twitter_cfg = TwitterConfig(auth_token,user_agent)

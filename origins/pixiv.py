@@ -11,17 +11,16 @@ class Pixiv:
         self.session = session()
 
         self.session.cookies.set(name='PHPSESSID', value=self.config.PHPSESSID)
-        self.session.cookies.set(name='device_token',value=self.config.device_token)
 
         if not self.config.user_agent is None:
             self.session.headers.update({'user-agent': self.config.user_agent})
     def get_urls(self, img_id: int | str):
         url = f'https://www.pixiv.net/artworks/{img_id}'
         with self.session.get(url) as r:
-            with open('test.html', 'w+') as f:
-                f.write(r.text)
             soup = BeautifulSoup(r.text, 'lxml')
             meta = soup.find('meta', attrs={'id': 'meta-preload-data'})
+            if meta is None:
+                raise PixivDeletedError
             meta_json = loads(meta['content'])
             urls_dict = meta_json['illust'][f'{img_id}']['urls']
             page = meta_json['illust'][f'{img_id}']['pageCount']
@@ -45,11 +44,12 @@ def get_pixiv_page(url: str, page: int):
     new_path = '/'.join(paths)
     return urlunparse((parsed.scheme, parsed.netloc, new_path, parsed.params, parsed.query, parsed.fragment))
 
+class PixivDeletedError(Exception):
+    pass
 
 class PixivConfig:
-    def __init__(self, PHPSESSID:str, device_token:str, user_agent:str='') -> None:
+    def __init__(self, PHPSESSID:str, user_agent:str='') -> None:
         self.PHPSESSID = PHPSESSID
-        self.device_token = device_token
         self.user_agent = user_agent
 
 @dataclass

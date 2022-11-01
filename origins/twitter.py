@@ -48,7 +48,7 @@ class Twitter:
         try:
             driver.find_element(By.XPATH, POST_XPATH)
         except NoSuchElementException:
-            return None
+            raise TwitterDeletedError
         WebDriverWait(driver ,10).until(EC.presence_of_element_located((By.XPATH, POST_INNER)))
         try:
             block = driver.find_element(By.XPATH, BLOCK_XPATH)
@@ -67,6 +67,9 @@ def parse_twitter_url(url:str) -> TwitterUrls:
             queries.update({'name': name})
             urls.append(urlunparse((parsed.scheme, parsed.netloc, parsed.path, parsed.params, urlencode(queries), parsed.fragment)))
         return TwitterUrls(urls[0],urls[1],urls[2],urls[3],urls[4],ext)
+
+class TwitterDeletedError(Exception):
+    pass
 
 class TwitterConfig:
     def __init__(self, auth_token:str, user_agent: str) -> None:
