@@ -17,7 +17,7 @@ from requests import Response, get
 import os.path
 from configparser import RawConfigParser
 from shutil import copy
-from PIL import Image
+from PIL import Image, UnidentifiedImageError
 
 class Sabersort():
     def __init__(self, config:SabersortConfig, ascii2d: Ascii2d, db: SaberDB, pixiv:Pixiv, twitter:Twitter) -> None:
@@ -177,11 +177,14 @@ class Sabersort():
         def get_target_thread(l:list[str]):
             for i in l:
                 if not os.path.isdir(i):
-                    with Image.open(i) as img:
-                        if not self.db.is_img_in_db(self.db.hasher.hash(img)):
-                            lck.acquire()
-                            targets.append(i)
-                            lck.release()
+                    try:
+                        with Image.open(i) as img:
+                            if not self.db.is_img_in_db(self.db.hasher.hash(img)):
+                                lck.acquire()
+                                targets.append(i)
+                                lck.release()
+                    except UnidentifiedImageError:
+                        pass
         
         for l in splited:
             t = Thread(target=get_target_thread,args=(l,))
