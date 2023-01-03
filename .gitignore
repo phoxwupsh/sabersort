@@ -16,3 +16,6 @@ test-img/
 
 # Databases
 *.db
+
+# pyenv
+.python-version
