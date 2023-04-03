@@ -28,7 +28,7 @@ Sabersort會將你的圖片，逐個透過[二次元画像詳細検索](https://
 
     [sabersort]
     Input directory = 
-    Output directory = 
+    Found directory = 
     Not found directory = 
     Exception directory = 
     Filename = {origin}-{author_id}-{id}
@@ -39,6 +39,8 @@ Sabersort會將你的圖片，逐個透過[二次元画像詳細検索](https://
     [saberdb]
     Database path = saberdb.db
     Check database = True
+
+    [hasher]
     Hash algorithm = Perceptual
     Hash size = 16
 
@@ -71,6 +73,7 @@ Sabersort會將你的圖片，逐個透過[二次元画像詳細検索](https://
 + ``[saberdb]``
     + ``Database path``：資料庫路徑，基本上不用改。
     + ``Check database``：要不要檢查資料庫去除已失效或刪除的圖片，改成``False``就不檢查，但這其實不會花多少時間，建議維持``True``。
++ ``[hasher]``
     + ``Hash algorithm``：用來判斷圖片是否相似的演算法，具體差異參考[這裡](https://github.com/JohannesBuchner/imagehash)，你有以下選擇：
         + ``Average``
         + ``Perceptual``
