@@ -19,10 +19,10 @@ Sabersort會將你的圖片，逐個透過[二次元画像詳細検索](https://
 - ImageHash 4.3.1
 - Pillow 9.2.0
 - requests 2.28.1
-- requests_toolbelt 0.10.0
 - Selenium 4.5.0
 - Webdriver Manager 3.8.4
 - packaging 21.3
+- undetected_chromedriver 3.2.0
 
 以上都準備好時，打開``config.ini``，你會看到：
 
