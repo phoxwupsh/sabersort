@@ -1,11 +1,15 @@
 from __future__ import annotations
+from .origin_base import Origin, OriginData, DeletedException
 from dataclasses import dataclass
-from requests import Response, session
+from requests import session
 from bs4 import BeautifulSoup
 from json import loads
 from urllib.parse import urlparse, urlunparse
+from io import BufferedRandom
 
-class Pixiv:
+CHUNK_SIZE = 4096
+
+class Pixiv(Origin):
     def __init__(self, config:PixivConfig):
         self.config = config
         self.session = session()
@@ -14,23 +18,33 @@ class Pixiv:
 
         if not self.config.user_agent is None:
             self.session.headers.update({'user-agent': self.config.user_agent})
-    def get_urls(self, img_id: int | str):
-        url = f'https://www.pixiv.net/artworks/{img_id}'
+    
+    def fetch_data(self, url: str) -> OriginData:
+        img_id = urlparse(url).path.split('/')[-1]
         with self.session.get(url) as r:
             soup = BeautifulSoup(r.text, 'lxml')
             meta = soup.find('meta', attrs={'id': 'meta-preload-data'})
             if meta is None:
-                raise PixivDeletedError
+                raise PixivDeletedException
             meta_json = loads(meta['content'])
             urls_dict = meta_json['illust'][f'{img_id}']['urls']
             page = meta_json['illust'][f'{img_id}']['pageCount']
-            return PixivUrls(urls_dict['mini'], urls_dict['thumb'], urls_dict['small'], urls_dict['regular'], urls_dict['original'],page)
-    
-    def fetch_image(self, url:str) -> Response:
-        self.session.headers.update({'referer': 'https://www.pixiv.net/'})
-        return self.session.get(url, stream=True)
 
-def get_pixiv_page(url: str, page: int):
+            orig_urls = list[str]()
+            thumb_urls = list[str]()
+            for i in range(page):
+                orig_urls.append(get_page_url(urls_dict['original'], i))
+                thumb_urls.append(get_page_url(urls_dict['small'], i))
+            return OriginData(orig_urls, thumb_urls, page)
+    
+    def fetch_img(self, url:str, dist: BufferedRandom):
+        self.session.headers.update({'referer': 'https://www.pixiv.net/'})
+        with self.session.get(url, stream=True) as res:
+            for chunk in res.iter_content(chunk_size=CHUNK_SIZE):
+                if chunk:
+                    dist.write(chunk)
+
+def get_page_url(url: str, page: int):
     parsed = urlparse(url)
     paths = parsed.path.split('/')
     filename = paths[-1]
@@ -44,7 +58,7 @@ def get_pixiv_page(url: str, page: int):
     new_path = '/'.join(paths)
     return urlunparse((parsed.scheme, parsed.netloc, new_path, parsed.params, parsed.query, parsed.fragment))
 
-class PixivDeletedError(Exception):
+class PixivDeletedException(DeletedException):
     pass
 
 class PixivConfig:
