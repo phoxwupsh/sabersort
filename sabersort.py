@@ -6,26 +6,29 @@ from tempfile import TemporaryFile
 from typing import Iterator
 from imagehash import ImageHash
 from urllib.parse import urlparse, parse_qs
-from saberdb.saberdb import SaberDB, SaberDBConfig
-from saberdb.hasher import Hasher, HashAlg
-from ascii2d import Ascii2d, Ascii2dConfig, Ascii2dResult, Origin, SortOrder
+from saberdb import SaberDB, SaberDBConfig
+from hasher import Hasher, HashAlg
+from ascii2d import Ascii2d, Ascii2dConfig, Ascii2dResult, OriginType, SortOrder
+from origins import Origin, OriginData, DeletedException
 from glob import glob
 from utils import split_list
-from origins.pixiv import Pixiv, PixivConfig, PixivDeletedError, PixivUrls, get_pixiv_page
-from origins.twitter import Twitter, TwitterConfig, TwitterUrls, parse_twitter_url, TwitterDeletedError
-from requests import Response, get
+from origins.pixiv import Pixiv, PixivConfig
+from origins.twitter import Twitter, TwitterConfig
 import os.path
 from configparser import RawConfigParser
 from shutil import copy
 from PIL import Image, UnidentifiedImageError
 
 class Sabersort():
-    def __init__(self, config:SabersortConfig, ascii2d: Ascii2d, db: SaberDB, pixiv:Pixiv, twitter:Twitter) -> None:
+    def __init__(self, config:SabersortConfig, ascii2d: Ascii2d, hasher: Hasher, db: SaberDB, pixiv:Pixiv, twitter:Twitter) -> None:
         self.config = config
         self.ascii2d = ascii2d
+        self.hasher = hasher
         self.db = db
         self.pixiv = pixiv
         self.twitter = twitter
+        if self.db.config.check_db:
+            self.db.check_db(self.hasher)
 
     def sort(self):
         src_img_list = glob(os.path.join(os.path.abspath(self.config.src_dir),'*'))
@@ -49,7 +52,7 @@ class Sabersort():
         prefered = self.ascii2d.get_prefered_results(results)
         index = 0
         ptr = 0
-        src_hash = self.db.hasher.hash(src_img_path)
+        src_hash = self.hasher.hash(src_img_path)
         index_out = 0
         select = None
         while True:
@@ -58,7 +61,7 @@ class Sabersort():
                 with TemporaryFile() as tmp:
                     with self.ascii2d.request_thumbnail(target) as thumb:
                         self.__iter_write_file(thumb.iter_content(), tmp)
-                        target_hash = self.db.hasher.hash(Image.open(tmp))
+                        target_hash = self.hasher.hash(Image.open(tmp))
                         if self.__is_identical(src_hash, target_hash):
                             select = target
                             break
@@ -75,62 +78,31 @@ class Sabersort():
         self.__found_handler(src_img_path, src_hash, select)
 
     def __found_handler(self, src_img_path:str, src_hash:ImageHash, target: Ascii2dResult):
+        origin_handler: Origin = None
         match target.origin:
-            case Origin.Pixiv:
-                self.__pixiv_handler(src_img_path, src_hash, target)
-            case Origin.Twitter:
-                self.__twitter_handler(src_img_path, src_hash, target)
-                
-    def __pixiv_handler(self, src_img_path:str, src_hash:ImageHash, target:Ascii2dResult):
+            case OriginType.Pixiv:
+                origin_handler = self.pixiv
+            case OriginType.Twitter:
+                origin_handler = self.twitter
         try:
-            id = urlparse(target.orig_link).path.split('/')[-1]
-            urls = self.pixiv.get_urls(id)
-            select = urls.original
-            if urls.page > 1:
-                select, index = self.__match_pixiv_result(src_hash, urls)
-                target.index = index
-            self.__finally_handler(select, target)
-        except PixivDeletedError:
+            origin_data = origin_handler.fetch_data(target.orig_link)
+            select = self.__match_origin_variant(origin_handler, src_hash, origin_data)
+            self.__finally_handler(origin_data.original[select], target)
+        except DeletedException:
             self.__deleted_handler(src_img_path, target)
 
-    def __match_pixiv_result(self, target_hash:ImageHash, results:PixivUrls) -> tuple[str, int]:
+    
+    def __match_origin_variant(self, origin_handler: Origin, target_hash: ImageHash, origin_data: OriginData) -> int:
         select = None
-        index = None
-        for i in range(results.page):
-            with self.pixiv.fetch_image(get_pixiv_page(results.small, i)) as res:
-                with TemporaryFile() as tmp:
-                    self.__iter_write_file(res.iter_content(chunk_size=self.config.chunk_size), tmp)
-                    with Image.open(tmp) as tmp_img:
-                        tmp_hash = self.db.hasher.hash(tmp_img)
-                        if self.__is_identical(target_hash, tmp_hash):
-                            select = get_pixiv_page(results.original, i)
-                            index = i
-                            break
-        return select, index
-
-    def __twitter_handler(self, src_img_path:str, src_hash:ImageHash, target: Ascii2dResult):
-        try:
-            urls = self.twitter.get_img_url(target.orig_link)
-            select, index = self.__match_twitter_result(src_hash ,urls)
-            target.index = index
-            self.__finally_handler(select.orig, target)
-        except TwitterDeletedError:
-            self.__deleted_handler(src_img_path, target)
-
-    def __match_twitter_result(self, target_hash:ImageHash, result_urls:list[str]) -> tuple[TwitterUrls, int]:
-        select = None
-        index = 0
-        for result in result_urls:
-            with self.__request(result) as res:
-                with TemporaryFile() as tmp:
-                    self.__iter_write_file(res.iter_content(chunk_size=self.config.chunk_size), tmp)
-                    with Image.open(tmp) as tmp_img:
-                        tmp_hash = self.db.hasher.hash(tmp_img)
-                        if self.__is_identical(target_hash, tmp_hash):
-                            select = result
-                            break
-                        index += 1
-        return parse_twitter_url(select), index
+        for i in range(origin_data.variant):
+            with TemporaryFile() as tmp:
+                origin_handler.fetch_img(origin_data.thumb[i], tmp)
+                with Image.open(tmp) as tmp_img:
+                    tmp_hash = self.hasher.hash(tmp_img)
+                    if self.__is_identical(target_hash, tmp_hash):
+                        select = i
+                        break
+        return select
     
     def __deleted_handler(self, src_img_path:str, result:Ascii2dResult):
         file_name = self.__get_filename(result)
@@ -140,24 +112,20 @@ class Sabersort():
     def __finally_handler(self, finally_url:str, target:Ascii2dResult):
         file_name = self.__get_filename(target)
         file_path = os.path.join(self.config.dist_dir, file_name)
-        req = None
+        origin_handler = None
         match target.origin:
-            case Origin.Twitter:
-                req = self.__request
-            case Origin.Pixiv:
-                req = self.pixiv.fetch_image
-        with req(finally_url) as final:
-            with open(os.path.abspath(file_path), 'wb+') as file:
-                self.__iter_write_file(final.iter_content(chunk_size=self.config.chunk_size), file)
-        self.db.add_img(file_path)
+            case OriginType.Twitter:
+                origin_handler = self.twitter
+            case OriginType.Pixiv:
+                origin_handler = self.pixiv
+        with open(os.path.abspath(file_path), 'wb+') as file:
+            origin_handler.fetch_img(finally_url, file)
+        self.db.add_img(self.hasher, file_path)
 
     def __iter_write_file(self, src: Iterator, dist: BufferedRandom):
         for chunk in src:
             if chunk:
                 dist.write(chunk)
-    
-    def __request(self, url:str) -> Response:
-        return get(url, headers={'user-agent': self.config.user_agent})
 
     def __not_found_handler(self, src_img_path: str):
         copy(src_img_path, self.config.not_found_dir)
@@ -179,7 +147,7 @@ class Sabersort():
                 if not os.path.isdir(i):
                     try:
                         with Image.open(i) as img:
-                            if not self.db.is_img_in_db(self.db.hasher.hash(img)):
+                            if not self.db.is_img_in_db(self.hasher.hash(img)):
                                 lck.acquire()
                                 targets.append(i)
                                 lck.release()
@@ -198,9 +166,9 @@ class Sabersort():
         author_id = None
         parsed_author = urlparse(target.author_link)
         match target.origin:
-            case Origin.Twitter:
+            case OriginType.Twitter:
                 author_id = parse_qs(parsed_author.query)['user_id'][0]
-            case Origin.Pixiv:
+            case OriginType.Pixiv:
                 author_id = parsed_author.path.split('/')[-1]
         d = {
             'origin': target.origin.value,
@@ -254,7 +222,11 @@ if __name__ == '__main__':
         with open('config.ini', 'w+') as cf:
             config.write(cf)
     if not 'saberdb' in sections:
-        config['saberdb'] = {'Database path': 'saberdb.db', 'Check database': 'True', 'Hash algorithm': 'Perceptual', 'Hash size': '16'}
+        config['saberdb'] = {'Database path': 'saberdb.db', 'Check database': 'True'}
+        with open('config.ini', 'w+') as cf:
+            config.write(cf)
+    if not 'hasher' in sections:
+        config['hasher'] = {'Hash algorithm': 'Perceptual', 'Hash size': '16'}
         with open('config.ini', 'w+') as cf:
             config.write(cf)
     if not 'ascii2d' in sections:
@@ -282,8 +254,11 @@ if __name__ == '__main__':
 
     db_path = config.get('saberdb', 'Database path')
     check_db = bool(config.get('saberdb', 'Check database'))
+    db_cfg = SaberDBConfig(db_path, check_db, 0)
+    db = SaberDB(db_cfg)
+
     hash_alg = None
-    match config.get('saberdb', 'Hash algorithm').lower():
+    match config.get('hasher', 'Hash algorithm').lower():
         case 'perceptual':
             hash_alg = HashAlg.Perceptual
         case 'perceptual_simple':
@@ -296,16 +271,15 @@ if __name__ == '__main__':
             hash_alg = HashAlg.Wavelet
         case 'hsv':
             hash_alg = HashAlg.HSV    
-    hash_size = int(config.get('saberdb', 'Hash size'))
-    db_cfg = SaberDBConfig(db_path, check_db, 0)
+    hash_size = int(config.get('hasher', 'Hash size'))
     hasher = Hasher(hash_alg, hash_size)
 
     prefered = None
     match config.get('ascii2d', 'Prefered origin').lower():
         case 'pixiv':
-            prefered = Origin.Pixiv
+            prefered = OriginType.Pixiv
         case 'twitter':
-            prefered = Origin.Twitter
+            prefered = OriginType.Twitter
     sort_order = None
     match config.get('ascii2d', 'Sort order').lower():
         case 'no':
@@ -323,9 +297,8 @@ if __name__ == '__main__':
     auth_token = config.get('twitter', 'auth_token')
     twitter_cfg = TwitterConfig(auth_token,user_agent)
     
-    db = SaberDB(db_cfg,hasher)
     ascii2d = Ascii2d(ascii2d_cfg)
     pixiv = Pixiv(pixiv_cfg)
     twitter = Twitter(twitter_cfg)
-    saber = Sabersort(sabersort_cfg, ascii2d, db, pixiv, twitter)
+    saber = Sabersort(sabersort_cfg, ascii2d, hasher, db, pixiv, twitter)
     saber.sort()
