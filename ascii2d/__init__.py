@@ -1,1 +1,1 @@
-from .ascii2d import Ascii2d, Ascii2dConfig, Ascii2dResult, Origin, SortOrder
+from .ascii2d import Ascii2d, Ascii2dConfig, Ascii2dResult, OriginType, SortOrder

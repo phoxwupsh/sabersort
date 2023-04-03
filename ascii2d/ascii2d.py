@@ -2,12 +2,21 @@ from __future__ import annotations
 from dataclasses import dataclass
 from urllib.parse import urlparse
 from requests import session
-from requests_toolbelt import MultipartEncoder
 from hashlib import md5
 from bs4 import BeautifulSoup
 from bs4.element import Tag
 from enum import Enum
-from os.path import basename, splitext
+import threading
+import atexit
+
+from undetected_chromedriver import Chrome, ChromeOptions
+
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
 
 class Ascii2d():
     def __init__(self, config: Ascii2dConfig) -> None:
@@ -15,6 +24,20 @@ class Ascii2d():
         self.session = session()
         if not self.config.user_agent is None:
             self.session.headers.update({'user-agent':self.config.user_agent})
+
+        self.__driver_manager = ChromeDriverManager()
+        self.__driver_path = self.__driver_manager.install()
+        self.__chrome_service = Service(self.__driver_path)
+        self.__chrome_caps = DesiredCapabilities().CHROME
+        self.__chrome_caps["pageLoadStrategy"] = "eager"
+        self.drivers = dict[str, Chrome]()
+        atexit.register(self.__cleanup)
+    
+    def __init_chrome(self, name:str):
+        options = ChromeOptions() 
+        # options.add_argument('--headless') # it seems like undetected_chromedriver can't run under headless mode
+        options.add_argument('--disable-gpu')
+        self.drivers[name] = Chrome(service=self.__chrome_service, desired_capabilities=self.__chrome_caps, options=options)
     
     def search(self, img_path:str) -> list[Ascii2dResult]:
         result_md5 = self.search_md5(img_path)
@@ -23,22 +46,29 @@ class Ascii2d():
         return self.search_file(img_path)
 
     def search_md5(self, img_path:str) -> list[Ascii2dResult]:
-        with self.session.get(f'https://ascii2d.net/search/color/{get_md5(img_path)}') as r:
-            soup = BeautifulSoup(r.text, 'lxml')
-            results = self.__parse_asii2d_soup(soup)
-            return results
+        thread = threading.current_thread().name
+        if not thread in self.drivers:
+            self.__init_chrome(thread)
+        driver = self.drivers[thread]
+        driver.get(f'https://ascii2d.net/search/color/{get_md5(img_path)}')
+        WebDriverWait(driver ,30).until(EC.presence_of_all_elements_located((By.CLASS_NAME, 'container')))
+        results = self.__parse_asii2d_soup(BeautifulSoup(driver.page_source, 'lxml'))
+        return results
     
     def search_file(self, img_path:str) -> list[Ascii2dResult]:
-        base = BeautifulSoup(self.session.get('https://ascii2d.net/').text, 'html.parser')
-        token = base.find(attrs={'name': 'authenticity_token'})['value']
-        post_data = {'utf8': (None, '\U00002713', 'text/html'), 'authenticity_token': (None, token, 'text/html'), 'file': (basename(img_path), open(img_path,'rb'), f'image/{splitext(img_path)}')}
-        multipart = MultipartEncoder(post_data)
-        headers = self.session.headers.copy()
-        headers['Content-Type'] = multipart.content_type
-        with self.session.post('https://ascii2d.net/search/file', headers=headers, data=multipart) as r:
-            soup = BeautifulSoup(r.text, 'lxml')
-            results = self.__parse_asii2d_soup(soup)
-            return results
+        thread = threading.current_thread().name
+        if not thread in self.drivers:
+            self.__init_chrome(thread)
+        driver = self.drivers[thread]
+        driver.get('https://ascii2d.net/')
+        WebDriverWait(driver ,30).until(EC.presence_of_all_elements_located((By.XPATH, '/html/body/div/div/form[1]/input[2]')))
+        upload = driver.find_element(By.NAME, 'file')
+        upload.send_keys(img_path)
+        btn = driver.find_element(By.XPATH, '/html/body/div/div/form[2]/div/div[3]/button')
+        btn.click()
+        WebDriverWait(driver ,30).until(EC.presence_of_all_elements_located((By.CLASS_NAME, 'container')))
+        results = self.__parse_asii2d_soup(BeautifulSoup(driver.page_source, 'lxml'))
+        return results
     
     def request_thumbnail(self, target:Ascii2dResult):
         return self.session.get(f'https://ascii2d.net/{target.thumbnail_link}')
@@ -68,6 +98,10 @@ class Ascii2d():
         pref = [r for r in results if r.origin == self.config.prefered]
         non_pref = [r for r in results if not r.origin == self.config.prefered]
         return pref, non_pref
+    
+    def __cleanup(self):
+        for driver in self.drivers.values():
+            driver.quit()
         
 
 def get_md5(img_path: str, chunk_size: int = 1024) -> str:
@@ -106,18 +140,18 @@ def parse_ascii2d_result(item_box:Tag) -> Ascii2dResult:
     return Ascii2dResult(thumbnail_link,md5_hash,width,height,extension,file_size,image_size,origin,orig_link,title,author,author_link,None,id)
 
 
-def parse_origin(origin: str) -> Origin:
+def parse_origin(origin: str) -> OriginType:
     match origin.lower():
         case "twitter":
-            return Origin.Twitter
+            return OriginType.Twitter
         case "pixiv":
-            return Origin.Pixiv
+            return OriginType.Pixiv
         case "niconico":
-            return Origin.Niconico
+            return OriginType.Niconico
         case "fanbox":
-            return Origin.Fanbox
+            return OriginType.Fanbox
 
-class Origin(Enum):
+class OriginType(Enum):
     Twitter = 'twitter'
     Pixiv = 'pixiv'
     Niconico = 'niconico'
@@ -129,7 +163,7 @@ class SortOrder(Enum):
     FileSize =2
 
 class Ascii2dConfig:
-    def __init__(self, user_agent: str = None, sort_order: SortOrder = SortOrder.No, first: int = 0, prefered: Origin = Origin.Pixiv) -> None:
+    def __init__(self, user_agent: str = None, sort_order: SortOrder = SortOrder.No, first: int = 0, prefered: OriginType = OriginType.Pixiv) -> None:
         self.user_agent = user_agent
         self.sort_order = sort_order
         self.first = first
@@ -145,7 +179,7 @@ class Ascii2dResult:
     extension:str
     file_size:float
     image_size:int
-    origin:Origin
+    origin:OriginType
     orig_link:str
     title:str
     author:str
