@@ -1,28 +1,31 @@
 from __future__ import annotations
 from .origin_base import Origin, OriginData, DeletedException
 from dataclasses import dataclass
-from requests import session
+from aiohttp import ClientSession
 from bs4 import BeautifulSoup
 from json import loads
 from urllib.parse import urlparse, urlunparse
-from io import BufferedRandom
-
-CHUNK_SIZE = 4096
+from io import BytesIO
 
 class Pixiv(Origin):
     def __init__(self, config:PixivConfig):
         self.config = config
-        self.session = session()
+        self.session = None
 
-        self.session.cookies.set(name='PHPSESSID', value=self.config.PHPSESSID)
-
-        if not self.config.user_agent is None:
-            self.session.headers.update({'user-agent': self.config.user_agent})
+    async def __get_session(self) -> ClientSession:
+        if self.session is None:
+            cookies = {"PHPSESSID": self.config.PHPSESSID}
+            self.session = ClientSession(cookies=cookies)
+            if not self.config.user_agent is None:
+                self.session.headers.update({'user-agent':self.config.user_agent})
+        return self.session
     
-    def fetch_data(self, url: str) -> OriginData:
+    async def fetch_data(self, url: str) -> OriginData:
+        session = await self.__get_session()
         img_id = urlparse(url).path.split('/')[-1]
-        with self.session.get(url) as r:
-            soup = BeautifulSoup(r.text, 'lxml')
+        async with session.get(url) as r:
+            text = await r.text()
+            soup = BeautifulSoup(text, 'lxml')
             meta = soup.find('meta', attrs={'id': 'meta-preload-data'})
             if meta is None:
                 raise PixivDeletedException
@@ -37,12 +40,12 @@ class Pixiv(Origin):
                 thumb_urls.append(get_page_url(urls_dict['small'], i))
             return OriginData(orig_urls, thumb_urls, page)
     
-    def fetch_img(self, url:str, dist: BufferedRandom):
-        self.session.headers.update({'referer': 'https://www.pixiv.net/'})
-        with self.session.get(url, stream=True) as res:
-            for chunk in res.iter_content(chunk_size=CHUNK_SIZE):
-                if chunk:
-                    dist.write(chunk)
+    async def fetch_img(self, url:str) -> BytesIO:
+        session = await self.__get_session()
+        session.headers.update({'referer': 'https://www.pixiv.net/'})
+        async with session.get(url) as res:
+            buf = await res.content.read()
+            return BytesIO(buf)
 
 def get_page_url(url: str, page: int):
     parsed = urlparse(url)

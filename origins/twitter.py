@@ -3,8 +3,6 @@ from dataclasses import dataclass
 import threading
 from .origin_base import Origin, OriginData, DeletedException
 from undetected_chromedriver import Chrome, ChromeOptions
-# from selenium.webdriver import Chrome
-# from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -12,12 +10,11 @@ from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
 from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
-from io import BufferedRandom
+from io import BytesIO
 import atexit
-from requests import get
+from aiohttp import ClientSession
 from urllib.parse import urlparse, urlunparse, urlencode, parse_qs
 
-CHUNK_SIZE = 4096
 NAMES = ['thumb', 'small', 'medium', 'large', 'orig']
 BLOCK_XPATH = '/html/body/div[1]/div/div/div[2]/main/div/div/div/div/div/section/div/div/div[1]/div/div/article/div/div/div[3]/div[3]/div/div/div/div/div[2]/div/div[2]'
 POST_XPATH = '/html/body/div[1]/div/div/div[2]/main/div/div/div/div/div/section/div/div/div[1]/div/div/article'
@@ -28,9 +25,7 @@ DELETED_XPATH = '//a[contains(@href,"/search")]'
 class Twitter(Origin):
     def __init__(self, config: TwitterConfig) -> None:
         self.config = config
-        # self.__chrome_options = Options()
-        # self.__chrome_options.add_argument(f'user-agent={self.config.user_agent}')
-        # self.__chrome_options.add_argument('--disable-gpu')
+        self.session = None
         self.__driver_manager = ChromeDriverManager()
         self.__driver_path = self.__driver_manager.install()
         self.__chrome_service = Service(self.__driver_path)
@@ -41,14 +36,20 @@ class Twitter(Origin):
 
     def __init_chrome(self, name:str):
         options = ChromeOptions()
-        # options.add_argument('--headless') # it seems like undetected_chromedriver can't run under headless mode
         options.add_argument('--disable-gpu')
 
         self.drivers[name] = Chrome(service=self.__chrome_service, desired_capabilities=self.__chrome_caps, options=options)
         self.drivers[name].get('https://twitter.com')
         self.drivers[name].add_cookie({'name': 'auth_token','value':self.config.auth_token, 'domain': '.twitter.com', 'path': '/', 'secure': True})
 
-    def fetch_data(self, target:str)-> list[str] | None:
+    async def __get_session(self) -> ClientSession:
+        if self.session is None:
+            self.session = ClientSession()
+            if not self.config.user_agent is None:
+                self.session.headers.update({'user-agent':self.config.user_agent})
+        return self.session
+
+    async def fetch_data(self, target:str)-> list[str] | None:
         thread = threading.current_thread().name
         if not thread in self.drivers:
             self.__init_chrome(thread)
@@ -74,11 +75,11 @@ class Twitter(Origin):
                 thumb_urls.append(urls.small)
             return OriginData(orig_urls, thumb_urls, len(imgs))
     
-    def fetch_img(self, url: str, dist: BufferedRandom):
-        with get(url, headers={'user-agent': self.config.user_agent}, stream= True) as res:
-            for chunk in res.iter_content(chunk_size=CHUNK_SIZE):
-                if chunk:
-                    dist.write(chunk)
+    async def fetch_img(self, url: str):
+        session = await self.__get_session()
+        async with session.get(url) as res:
+            buf = await res.content.read()
+            return BytesIO(buf)
     
     def __cleanup(self):
         for driver in self.drivers.values():

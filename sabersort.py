@@ -1,9 +1,7 @@
 from __future__ import annotations
-from io import BufferedRandom
+from io import BytesIO
 from multiprocessing import cpu_count
 from threading import RLock, Thread
-from tempfile import TemporaryFile
-from typing import Iterator
 from imagehash import ImageHash
 from urllib.parse import urlparse, parse_qs
 from saberdb import SaberDB, SaberDBConfig
@@ -18,6 +16,9 @@ import os.path
 from configparser import RawConfigParser
 from shutil import copy
 from PIL import Image, UnidentifiedImageError
+from aiofiles.threadpool.binary import AsyncFileIO
+import aiofiles
+import asyncio
 
 class Sabersort():
     def __init__(self, config:SabersortConfig, ascii2d: Ascii2d, hasher: Hasher, db: SaberDB, pixiv:Pixiv, twitter:Twitter) -> None:
@@ -30,25 +31,15 @@ class Sabersort():
         if self.db.config.check_db:
             self.db.check_db(self.hasher)
 
-    def sort(self):
+    async def sort(self):
         src_img_list = glob(os.path.join(os.path.abspath(self.config.src_dir),'*'))
         target_img_list = self.get_target_list(src_img_list)
 
-        def sort_thread(targets: list[str]):
-            for img_path in targets:
-                results = self.ascii2d.search(img_path)
-                self.__results_handler(img_path, results)
-
-        splited_targets = split_list(target_img_list, self.config.threads)
-        ts = list[Thread]()
-        for l in splited_targets:
-            t = Thread(target=sort_thread, args=(l,))
-            ts.append(t)
-            t.start()
-        for t in ts:
-            t.join()
+        for item in target_img_list:
+            res = await self.ascii2d.search(item)
+            await self.__results_handler(item, res)
     
-    def __results_handler(self, src_img_path:str, results: list[Ascii2dResult]):
+    async def __results_handler(self, src_img_path:str, results: list[Ascii2dResult]):
         prefered = self.ascii2d.get_prefered_results(results)
         index = 0
         ptr = 0
@@ -58,13 +49,12 @@ class Sabersort():
         while True:
             try:
                 target = prefered[ptr][index]
-                with TemporaryFile() as tmp:
-                    with self.ascii2d.request_thumbnail(target) as thumb:
-                        self.__iter_write_file(thumb.iter_content(), tmp)
-                        target_hash = self.hasher.hash(Image.open(tmp))
-                        if self.__is_identical(src_hash, target_hash):
-                            select = target
-                            break
+                res = await self.ascii2d.fetch_thumbnail(target)
+                tmp_img = Image.open(res)
+                target_hash = self.hasher.hash(tmp_img)
+                if self.__is_identical(src_hash, target_hash):
+                    select = target
+                    break
                 index += ptr
                 ptr = (ptr + 1) % 2
             except IndexError:
@@ -75,9 +65,9 @@ class Sabersort():
         if select is None:
             self.__not_found_handler(src_img_path)
             return
-        self.__found_handler(src_img_path, src_hash, select)
+        await self.__found_handler(src_img_path, src_hash, select)
 
-    def __found_handler(self, src_img_path:str, src_hash:ImageHash, target: Ascii2dResult):
+    async def __found_handler(self, src_img_path:str, src_hash:ImageHash, target: Ascii2dResult):
         origin_handler: Origin = None
         match target.origin:
             case OriginType.Pixiv:
@@ -85,31 +75,30 @@ class Sabersort():
             case OriginType.Twitter:
                 origin_handler = self.twitter
         try:
-            origin_data = origin_handler.fetch_data(target.orig_link)
-            select = self.__match_origin_variant(origin_handler, src_hash, origin_data)
-            self.__finally_handler(origin_data.original[select], target)
+            origin_data = await origin_handler.fetch_data(target.orig_link)
+            select = await self.__match_origin_variant(origin_handler, src_hash, origin_data)
+            await self.__finally_handler(origin_data.original[select], target)
         except DeletedException:
-            self.__deleted_handler(src_img_path, target)
+            await self.__deleted_handler(src_img_path, target)
 
     
-    def __match_origin_variant(self, origin_handler: Origin, target_hash: ImageHash, origin_data: OriginData) -> int:
+    async def __match_origin_variant(self, origin_handler: Origin, target_hash: ImageHash, origin_data: OriginData) -> int:
         select = None
         for i in range(origin_data.variant):
-            with TemporaryFile() as tmp:
-                origin_handler.fetch_img(origin_data.thumb[i], tmp)
-                with Image.open(tmp) as tmp_img:
-                    tmp_hash = self.hasher.hash(tmp_img)
-                    if self.__is_identical(target_hash, tmp_hash):
-                        select = i
-                        break
+            res = await origin_handler.fetch_img(origin_data.thumb[i])
+            with Image.open(res) as tmp_img:
+                tmp_hash = self.hasher.hash(tmp_img)
+                if self.__is_identical(target_hash, tmp_hash):
+                    select = i
+                    break
         return select
     
-    def __deleted_handler(self, src_img_path:str, result:Ascii2dResult):
+    async def __deleted_handler(self, src_img_path:str, result:Ascii2dResult):
         file_name = self.__get_filename(result)
         file_path = os.path.join(self.config.except_dir, file_name)
         copy(src_img_path, file_path)
     
-    def __finally_handler(self, finally_url:str, target:Ascii2dResult):
+    async def __finally_handler(self, finally_url:str, target:Ascii2dResult):
         file_name = self.__get_filename(target)
         file_path = os.path.join(self.config.dist_dir, file_name)
         origin_handler = None
@@ -118,14 +107,17 @@ class Sabersort():
                 origin_handler = self.twitter
             case OriginType.Pixiv:
                 origin_handler = self.pixiv
-        with open(os.path.abspath(file_path), 'wb+') as file:
-            origin_handler.fetch_img(finally_url, file)
+        async with aiofiles.open(os.path.abspath(file_path), 'wb+') as file:
+            res = await origin_handler.fetch_img(finally_url)
+            await self.__iter_write_file(res, file)
         self.db.add_img(self.hasher, file_path)
 
-    def __iter_write_file(self, src: Iterator, dist: BufferedRandom):
-        for chunk in src:
-            if chunk:
-                dist.write(chunk)
+    async def __iter_write_file(self, src: BytesIO, dist: AsyncFileIO):
+        while True:
+            chunk = src.read(4096)
+            if not chunk:
+                break
+            await dist.write(chunk)
 
     def __not_found_handler(self, src_img_path: str):
         copy(src_img_path, self.config.not_found_dir)
@@ -301,4 +293,5 @@ if __name__ == '__main__':
     pixiv = Pixiv(pixiv_cfg)
     twitter = Twitter(twitter_cfg)
     saber = Sabersort(sabersort_cfg, ascii2d, hasher, db, pixiv, twitter)
-    saber.sort()
+    
+    asyncio.run(saber.sort())
