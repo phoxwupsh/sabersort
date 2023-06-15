@@ -4,20 +4,32 @@ from urllib.parse import urlparse
 from aiohttp import ClientSession
 from hashlib import md5
 from enum import Enum
-from io import BytesIO
-
-from PicImageSearch.model import Ascii2DResponse, Ascii2DItem
+from io import BytesIO, BufferedReader
+from typing import Any
+from pathlib import Path
+from bs4 import BeautifulSoup, Tag
 from PicImageSearch.ascii2d import Ascii2D as PISAscii2d
 
 class Ascii2d():
     def __init__(self, config: Ascii2dConfig) -> None:
         self.config = config
         self.session = None
-        self.__internal = PISAscii2d()
+        self.__internal = PISAscii2dExtend()
     
     async def search(self, img_path:str) -> list[Ascii2dResult]:
-        resp = await self.__internal.search(file=img_path)
-        result = parse_ascii2d_response(resp)
+        hash = None
+        result = None
+        with open(img_path, "rb") as img:
+            hash = get_md5(img)
+        
+        resp_text_md5, _ = await self.__internal.search_md5_raw(hash)
+        result = self.__parse_ascii2d_resp(resp_text_md5)
+        if len(result) > 0:
+            self.__sort_result(result)
+            return result
+        else:
+            resp_text, _ = await self.__internal.search_raw(file=img_path)
+            result = self.__parse_ascii2d_resp(resp_text)
         self.__sort_result(result)
         return result
 
@@ -37,6 +49,19 @@ class Ascii2d():
             case SortOrder.ImageSize:
                 results.sort(key=lambda r: r.image_size, reverse=True)
     
+    def __parse_ascii2d_resp(self, resp_text: str) -> list[Ascii2dResult]:
+        soup = BeautifulSoup(resp_text, "lxml")
+        rs = soup.find_all(attrs={'class':'item-box'})
+        results = list[Ascii2dResult]()
+        for r in rs:
+            parsed = parse_ascii2d_result(r)
+            if not parsed.origin == None:
+                results.append(parsed)
+        if len(results) > self.config.first and self.config.first > 0:
+            results = results[:self.config.first]
+        self.__sort_result(results)
+        return results
+    
     def get_prefered_results(self, results: list[Ascii2dResult]) -> tuple[list[Ascii2dResult], list[Ascii2dResult]]:
         pref = [r for r in results if r.origin == self.config.prefered]
         non_pref = [r for r in results if not r.origin == self.config.prefered]
@@ -54,48 +79,82 @@ class Ascii2d():
     #         driver.quit()
         
 
-def get_md5(img_path: str, chunk_size: int = 1024) -> str:
-    with open(img_path, 'rb') as img:
-        h = md5()
-        c = img.read(chunk_size)
-        while c:
-            h.update(c)
-            c = img.read(chunk_size)
-        return h.hexdigest()
+def get_md5(file: BufferedReader, chunk_size: int = 1024) -> str:
+    h = md5()
+    c = file.read(chunk_size)
+    while c:
+        h.update(c)
+        c = file.read(chunk_size)
+    return h.hexdigest()
 
-def parse_ascii2d_response(resp: Ascii2DResponse) -> list[Ascii2dResult]:
-    res = list[Ascii2dResult]()
-    for r in resp.raw:
-        res.append(parse_ascii2d_item(r))
-    return res
+def parse_ascii2d_result(item_box:Tag) -> Ascii2dResult:
+    md5_e = item_box.find_next(attrs={'class': 'hash'})
+    info  = md5_e.find_next('small').decode_contents().split(' ')
+    size = info[0]
+    detail_box = item_box.find_next(attrs={'class': 'detail-box'})
+    link = detail_box.find_next('a')
+    origin = parse_origin(detail_box.find_next('img').get(key='alt'))
+    author_e = link.find_next('a')
 
-def parse_ascii2d_item(item: Ascii2DItem) -> Ascii2dResult:
-    info_split = item.detail.split(" ")
-    size = info_split[0].split("x")
-    width = int(size[0])
-    height = int(size[1])
-    image_size = width * height
-    extension = info_split[1].lower()
-    if extension == "jpeg":
-        extension = "jpg"
-    file_size = float(info_split[2].split("KB")[0])
-    origin = None
-    if item.url.startswith("https://twitter"):
-        origin = OriginType.Twitter
-    elif item.url.startswith("https://www.pixiv"):
-        origin = OriginType.Pixiv
-    elif item.url.startswith("https://seiga"):
-        origin = OriginType.Niconico
-    else:
-        origin = OriginType.Fanbox
-    id = urlparse(item.url).path.split('/')[-1]
-    return Ascii2dResult(item.thumbnail, item.hash, width, height, extension, file_size, image_size, origin, item.url, item.title, item.author, item.author_url, None, id)
+    thumbnail_link = f"https://ascii2d.net{item_box.find_next(attrs={'class': 'image-box'}).find_next('img').get(key='src')}"
+    md5_hash = md5_e.decode_contents()
+    width = int(size.split('x')[0])
+    height = int(size.split('x')[1])
+    extension = info[1].lower()
+    if extension == 'jpeg':
+        extension = 'jpg'
+    file_size = float(info[2].split('KB')[0])
+    image_size = width*height
+
+    orig_link = link['href']
+    title = link.decode_contents()
+    author = author_e.decode_contents()
+    author_link = author_e['href']
+    id = urlparse(str(orig_link)).path.split('/')[-1]
+    return Ascii2dResult(thumbnail_link,md5_hash,width,height,extension,file_size,image_size,origin,orig_link,title,author,author_link,None,id)
+
+def parse_origin(origin: str) -> OriginType:
+    match origin.lower():
+        case "twitter":
+            return OriginType.Twitter
+        case "pixiv":
+            return OriginType.Pixiv
+        case "niconico":
+            return OriginType.Niconico
+        case "fanbox":
+            return OriginType.Fanbox
+
+class PISAscii2dExtend(PISAscii2d):
+    def __init__(self, **request_kwargs: Any):
+        super().__init__(**request_kwargs)
+    
+    async def search_md5_raw(self, hash: str) -> tuple[str, str]:
+        resp_text, resp_url, _ = await self.get(f"https://ascii2d.net/search/color/{hash}")
+        return resp_text, resp_url
+
+    async def search_raw(self, url: str | None = None, file: str | bytes | Path | None = None) -> tuple[str, str]:
+        if url:
+            ascii2d_url = "https://ascii2d.net/search/uri"
+            resp_text, resp_url, _ = await self.post(ascii2d_url, data={"uri": url})
+        elif file:
+            ascii2d_url = "https://ascii2d.net/search/file"
+            files: dict[str, Any] = {"file": file if isinstance(file, bytes) else open(file, "rb")}
+            resp_text, resp_url, _ = await self.post(ascii2d_url, files=files)
+        else:
+            raise ValueError("url or file is required")
+
+        if self.bovw:
+            resp_text, resp_url, _ = await self.get(resp_url.replace("/color/", "/bovw/"))
+
+        return resp_text, resp_url
+
 
 class OriginType(Enum):
     Twitter = 'twitter'
     Pixiv = 'pixiv'
     Niconico = 'niconico'
     Fanbox = 'fanbox'
+
 
 class SortOrder(Enum):
     No = 0
