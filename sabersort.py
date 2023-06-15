@@ -96,7 +96,7 @@ class Sabersort():
     async def __deleted_handler(self, src_img_path:str, result:Ascii2dResult):
         file_name = self.__get_filename(result)
         file_path = os.path.join(self.config.except_dir, file_name)
-        copy(src_img_path, file_path)
+        await asyncio.to_thread(copy(src_img_path, file_path))
     
     async def __finally_handler(self, finally_url:str, target:Ascii2dResult):
         file_name = self.__get_filename(target)
@@ -119,8 +119,8 @@ class Sabersort():
                 break
             await dist.write(chunk)
 
-    def __not_found_handler(self, src_img_path: str):
-        copy(src_img_path, self.config.not_found_dir)
+    async def __not_found_handler(self, src_img_path: str):
+        await asyncio.to_thread(copy(src_img_path, self.config.not_found_dir))
 
     def __is_identical(self, src_hash: ImageHash, target_hash:ImageHash) -> bool:
         return self.__get_bias(src_hash, target_hash) <= self.config.threshold
