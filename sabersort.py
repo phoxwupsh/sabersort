@@ -9,7 +9,7 @@ from hasher import Hasher, HashAlg
 from ascii2d import Ascii2d, Ascii2dConfig, Ascii2dResult, OriginType, SortOrder
 from origins import Origin, OriginData, DeletedException
 from glob import glob
-from utils import split_list, async_write_file, async_copyfile
+from utils import split_list, async_write_file, async_copyfile, FileNameFmt
 from origins.pixiv import Pixiv, PixivConfig
 from origins.twitter import Twitter, TwitterConfig
 import os.path
@@ -17,6 +17,7 @@ from configparser import RawConfigParser
 from PIL import Image, UnidentifiedImageError
 import aiofiles
 import asyncio
+import rtoml
 
 class Sabersort():
     def __init__(self, config:SabersortConfig, ascii2d: Ascii2d, hasher: Hasher, db: SaberDB, pixiv:Pixiv, twitter:Twitter) -> None:
@@ -217,110 +218,42 @@ class SaberContext:
     def deleted(self):
         self.__deleted = True
 
-class FileNameFmt(dict):
-    def __missing__(self, key):
-        return f"{key}"
-    
-    def __getitem__(self, __key):
-        r = super().__getitem__(__key)
-        return "" if r is None else r
-    
-    def __setitem__(self, __key, __value) -> None:
-        if not isinstance(__key, str):
-            raise IndexError
-        return super().__setitem__(__key, __value)
-
 if __name__ == '__main__':
-    config = RawConfigParser()
-    config.optionxform = str
-    config.read('config.ini')
-
-    sections = config.sections()
-    if not os.path.isfile('config.ini'):
-        with open('config.ini', 'w+') as cf:
-            config.write(cf)
-    if not 'sabersort' in sections:
-        config['sabersort'] = {'Input directory': '', 'Found directory':'', 'Not found directory':'', 'Exception directory':'', 'Filename': '{origin}-{author_id}-{id}', 'Threshold': '10', 'User-agent': ''}
-        with open('config.ini', 'w+') as cf:
-            config.write(cf)
-    if not 'saberdb' in sections:
-        config['saberdb'] = {'Database path': 'saberdb.db', 'Check database': 'True'}
-        with open('config.ini', 'w+') as cf:
-            config.write(cf)
-    if not 'hasher' in sections:
-        config['hasher'] = {'Hash algorithm': 'Perceptual', 'Hash size': '16'}
-        with open('config.ini', 'w+') as cf:
-            config.write(cf)
-    if not 'ascii2d' in sections:
-        config['ascii2d'] = {'Prefered origin': 'Pixiv', 'Sort order': 'No', 'First': '0'}
-        with open('config.ini', 'w+') as cf:
-            config.write(cf)
-    if not 'pixiv' in sections:
-        config['pixiv'] = {'PHPSESSID': ''}
-        with open('config.ini', 'w+') as cf:
-            config.write(cf)
-    if not 'twitter' in sections:
-        config['twitter'] = {'auth_token': ''}
-        with open('config.ini', 'w+') as cf:
-            config.write(cf)
+    with open('config.toml', 'r') as c:
+        config = rtoml.load(c)
     
-    in_dir = config.get('sabersort', 'Input directory')
-    out_dir = config.get('sabersort', 'Found directory')
-    nf_dir = config.get('sabersort', 'Not found directory')
-    exc_dir = config.get('sabersort', 'Exception directory')
-    fmt = config.get('sabersort', 'Filename')
-    threshold = int(config.get('sabersort', 'Threshold'))
-    user_agent = config.get('sabersort', 'User-agent')
+    in_dir: str = config['sabersort']['input']
+    out_dir: str = config['sabersort']['found']
+    nf_dir: str = config['sabersort']['not_found']
+    exc_dir: str = config['sabersort']['exception']
+    fmt: str = config['sabersort']['filename']
+    threshold: int = config['sabersort']['threshold']
+    user_agent: str = config['sabersort']['user_agent']
     sabersort_cfg = SabersortConfig(in_dir, out_dir, nf_dir, exc_dir, fmt, threshold, user_agent)
 
-    db_path = config.get('saberdb', 'Database path')
-    check_db = bool(config.get('saberdb', 'Check database'))
-    db_cfg = SaberDBConfig(db_path, check_db, 0)
+    db_path: str = config['saberdb']['database_path']
+    check_db: str = config['saberdb']['check_database']
+    db_cfg = SaberDBConfig(db_path, check_db)
     db = SaberDB(db_cfg)
 
-    hash_alg = None
-    match config.get('hasher', 'Hash algorithm').lower():
-        case 'perceptual':
-            hash_alg = HashAlg.Perceptual
-        case 'perceptual_simple':
-            hash_alg = HashAlg.PerceptualSimple
-        case 'average':
-            hash_alg = HashAlg.Average
-        case 'difference':
-            hash_alg = HashAlg.Difference
-        case 'wavelet':
-            hash_alg = HashAlg.Wavelet
-        case 'hsv':
-            hash_alg = HashAlg.HSV    
-    hash_size = int(config.get('hasher', 'Hash size'))
+    hash_alg = HashAlg.from_str(config['hasher']['hash_algorithm'])
+    hash_size: int = config['hasher']['hash_size']
     hasher = Hasher(hash_alg, hash_size)
 
-    prefered = None
-    match config.get('ascii2d', 'Prefered origin').lower():
-        case 'pixiv':
-            prefered = OriginType.Pixiv
-        case 'twitter':
-            prefered = OriginType.Twitter
-    sort_order = None
-    match config.get('ascii2d', 'Sort order').lower():
-        case 'no':
-            sort_order = SortOrder.No
-        case 'image_size':
-            sort_order = SortOrder.ImageSize
-        case 'file_size':
-            sort_order = SortOrder.FileSize
-    first = int(config.get('ascii2d', 'First'))
+    prefered = OriginType.from_str(config['ascii2d']['perfered_origin'])
+    sort_order = SortOrder.from_str(config['ascii2d']['sort_order'])
+    first: int = config['ascii2d']['first']
     ascii2d_cfg = Ascii2dConfig(user_agent, sort_order, first, prefered)
-
-    phpsessid = config.get('pixiv', 'PHPSESSID')
-    pixiv_cfg = PixivConfig(phpsessid,user_agent)
-
-    auth_token = config.get('twitter', 'auth_token')
-    twitter_cfg = TwitterConfig(auth_token,user_agent)
-    
     ascii2d = Ascii2d(ascii2d_cfg)
+
+    phpsessid: str = config['pixiv']['PHPSESSID']
+    pixiv_cfg = PixivConfig(phpsessid,user_agent)
     pixiv = Pixiv(pixiv_cfg)
+
+    auth_token: str = config['twitter']['auth_token']
+    twitter_cfg = TwitterConfig(auth_token,user_agent)
     twitter = Twitter(twitter_cfg)
+    
     saber = Sabersort(sabersort_cfg, ascii2d, hasher, db, pixiv, twitter)
     
     asyncio.run(saber.sort())

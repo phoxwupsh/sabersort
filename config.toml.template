@@ -1,0 +1,27 @@
+[sabersort]
+input = ''
+found = ''
+not_found = ''
+exception = ''
+filename = '{origin}-{author_id}-{id}'
+threshold = 10
+user_agent = ''
+
+[saberdb]
+database_path = ''
+check_database = true
+
+[hasher]
+hash_algorithm = 'Perceptual'
+hash_size = 16
+
+[ascii2d]
+perfered_origin = 'Pixiv'
+sort_order = 'No'
+first = 0
+
+[pixiv]
+PHPSESSID = ''
+
+[twitter]
+auth_token = ''

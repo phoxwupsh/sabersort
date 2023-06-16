@@ -20,4 +20,4 @@ test-img/
 # pyenv
 .python-version
 
-config.ini
+config.toml
