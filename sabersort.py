@@ -185,13 +185,13 @@ class Sabersort():
         return f'{self.config.filename_fmt.format_map(fd)}.{target.extension}'
 
 class SabersortConfig:
-    def __init__(self, src_dir:str, dist_dir:str, not_found_dir:str, except_dir:str, filename_fmt: str, threads:int=1, threshold: int = 0, user_agent: str = None, chunk_size:int = 4096) -> None:
+    def __init__(self, src_dir:str, dist_dir:str, not_found_dir:str, except_dir:str, filename_fmt: str, threshold: int = 0, user_agent: str = None, chunk_size:int = 4096) -> None:
         self.src_dir = src_dir
         self.dist_dir = dist_dir
         self.not_found_dir = not_found_dir
         self.except_dir = except_dir
         self.filename_fmt = filename_fmt
-        self.threads = threads if threads > 0 else cpu_count()
+        self.threads = cpu_count()
         self.threshold = threshold
         self.user_agent = user_agent if not user_agent is None else 'Sabersort'
         self.chunk_size = chunk_size
@@ -256,7 +256,7 @@ if __name__ == '__main__':
         with open('config.ini', 'w+') as cf:
             config.write(cf)
     if not 'sabersort' in sections:
-        config['sabersort'] = {'Input directory': '', 'Found directory':'', 'Not found directory':'', 'Exception directory':'', 'Filename': '{origin}-{author_id}-{id}', 'Threshold': '10', 'Thread': '3', 'User-agent': ''}
+        config['sabersort'] = {'Input directory': '', 'Found directory':'', 'Not found directory':'', 'Exception directory':'', 'Filename': '{origin}-{author_id}-{id}', 'Threshold': '10', 'User-agent': ''}
         with open('config.ini', 'w+') as cf:
             config.write(cf)
     if not 'saberdb' in sections:
@@ -286,9 +286,8 @@ if __name__ == '__main__':
     exc_dir = config.get('sabersort', 'Exception directory')
     fmt = config.get('sabersort', 'Filename')
     threshold = int(config.get('sabersort', 'Threshold'))
-    threads = int(config.get('sabersort', 'Thread'))
     user_agent = config.get('sabersort', 'User-agent')
-    sabersort_cfg = SabersortConfig(in_dir, out_dir, nf_dir, exc_dir, fmt, threads, threshold, user_agent)
+    sabersort_cfg = SabersortConfig(in_dir, out_dir, nf_dir, exc_dir, fmt, threshold, user_agent)
 
     db_path = config.get('saberdb', 'Database path')
     check_db = bool(config.get('saberdb', 'Check database'))

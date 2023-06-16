@@ -5,7 +5,6 @@ Not found directory =
 Exception directory = 
 Filename = {origin}-{author_id}-{id}
 Threshold = 10
-Thread = 3
 User-agent = 
 
 [saberdb]
