@@ -1,14 +1,14 @@
 from __future__ import annotations
 from dataclasses import dataclass
-import threading
 from .origin_base import Origin, OriginData, DeletedException
-from undetected_chromedriver import Chrome, ChromeOptions
+from selenium.webdriver import Chrome, ChromeOptions
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
 from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.webdriver import WebDriver
 from webdriver_manager.chrome import ChromeDriverManager
 from io import BytesIO
 from aiohttp import ClientSession
@@ -28,19 +28,23 @@ class Twitter(Origin):
         self.session = None
         self.__driver_manager = ChromeDriverManager()
         self.__driver_path = self.__driver_manager.install()
-        self.__chrome_service = Service(self.__driver_path)
-        self.__chrome_caps = DesiredCapabilities().CHROME
-        self.__chrome_caps["pageLoadStrategy"] = "eager"
-        self.drivers = dict[str, Chrome]()
+        self.__driver: WebDriver = None
 
-    def __init_chrome(self, name:str):
-        options = ChromeOptions()
-        options.add_argument('--disable-gpu')
-        options.add_argument("--blink-settings=imagesEnabled=false")
+    def __get_driver(self) -> WebDriver:
+        if self.__driver is None:
+            options = ChromeOptions()
+            options.add_argument('--disable-gpu')
+            options.add_argument("--blink-settings=imagesEnabled=false")
+            options.add_argument("--disable-blink-features=automationcontrolled")
 
-        self.drivers[name] = Chrome(service=self.__chrome_service, desired_capabilities=self.__chrome_caps, options=options)
-        self.drivers[name].get('https://twitter.com')
-        self.drivers[name].add_cookie({'name': 'auth_token','value':self.config.auth_token, 'domain': '.twitter.com', 'path': '/', 'secure': True})
+            service = Service(self.__driver_path)
+            caps = DesiredCapabilities().CHROME
+            caps["pageLoadStrategy"] = "eager"
+
+            self.__driver = Chrome(service=service, desired_capabilities=caps, options=options)
+            self.__driver.get('https://twitter.com')
+            self.__driver.add_cookie({'name': 'auth_token','value':self.config.auth_token, 'domain': '.twitter.com', 'path': '/', 'secure': True})
+        return self.__driver
 
     async def __get_session(self) -> ClientSession:
         if self.session is None:
@@ -51,10 +55,7 @@ class Twitter(Origin):
         return self.session
 
     async def fetch_data(self, target:str)-> list[str] | None:
-        thread = threading.current_thread().name
-        if not thread in self.drivers:
-            self.__init_chrome(thread)
-        driver = self.drivers[thread]
+        driver = self.__get_driver()
         driver.get(target)
         WebDriverWait(driver ,30).until(EC.presence_of_all_elements_located((By.XPATH, f'{POST_XPATH}|{DELETED_XPATH}')))
         try:
@@ -85,8 +86,7 @@ class Twitter(Origin):
     async def __cleanup(self):
         if not self.session is None:
             await self.session.close()
-        for driver in self.drivers.values():
-            driver.quit()
+        self.__driver.quit()
 
 def parse_twitter_url(url:str) -> TwitterUrls:
         parsed = urlparse(url)
