@@ -1,1 +1,1 @@
-from .origin_base import Origin, OriginData, DeletedException
+from .origin_base import *

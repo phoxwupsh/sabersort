@@ -31,14 +31,14 @@ class Sabersort():
 
     async def sort(self):
         src_img_list = glob(os.path.join(os.path.abspath(self.config.src_dir),'*'))
-        target_img_list = self.get_target_list(src_img_list)
+        queue = self.__get_queue(src_img_list)
 
-        for item in target_img_list:
+        for item in queue:
             await self.__sort_process(item)
     
     async def __sort_process(self, src_path: str):
         ctx = await SaberContext.with_hasher(src_path, self.hasher)
-        await ctx.search(self.ascii2d)
+        ctx.results = await self.ascii2d.search(ctx.src_path)
         await self.__results_handler(ctx)
         if ctx.is_found():
             await self.__found_handler(ctx)
@@ -130,13 +130,13 @@ class Sabersort():
     def __get_bias(self, src_hash: ImageHash, target_hash:ImageHash) -> int:
         return src_hash - target_hash
 
-    def get_target_list(self, img_path_list:list[str]):
+    def __get_queue(self, img_path_list:list[str]):
         splited = split_list(img_path_list, self.config.threads)
         threads = list[Thread]()
         targets = list[str]()
         lck = RLock()
 
-        def get_target_thread(l:list[str]):
+        def __queue_thread(l:list[str]) -> list[str]:
             for i in l:
                 if not os.path.isdir(i):
                     try:
@@ -149,7 +149,7 @@ class Sabersort():
                         pass
         
         for l in splited:
-            t = Thread(target=get_target_thread,args=(l,))
+            t = Thread(target=__queue_thread,args=(l,))
             threads.append(t)
             t.start()
         for t in threads:
@@ -176,7 +176,7 @@ class Sabersort():
         return f'{self.config.filename_fmt.format_map(fd)}.{target.extension}'
 
 class SabersortConfig:
-    def __init__(self, src_dir:str, dist_dir:str, not_found_dir:str, except_dir:str, filename_fmt: str, threshold: int = 0, user_agent: str = None, chunk_size:int = 4096) -> None:
+    def __init__(self, src_dir:str, dist_dir:str, not_found_dir:str, except_dir:str, filename_fmt: str, threshold: int = 0, user_agent: str = None) -> None:
         self.src_dir = src_dir
         self.dist_dir = dist_dir
         self.not_found_dir = not_found_dir
@@ -184,8 +184,7 @@ class SabersortConfig:
         self.filename_fmt = filename_fmt
         self.threads = cpu_count()
         self.threshold = threshold
-        self.user_agent = user_agent if not user_agent is None else 'Sabersort'
-        self.chunk_size = chunk_size
+        self.user_agent = user_agent
 
 class SaberContext:
     def __init__(self, src_path: str) -> None:
@@ -206,10 +205,6 @@ class SaberContext:
             self.hash = hasher.hash(img)
             return self
     
-    async def search(self, searcher: Ascii2d):
-        res = await searcher.search(self.src_path)
-        self.results = res
-    
     def is_found(self) -> bool:
         return self.__found
     
@@ -224,13 +219,11 @@ class SaberContext:
 
 class FileNameFmt(dict):
     def __missing__(self, key):
-        return '{%s}'.format(key)
+        return f"{key}"
     
     def __getitem__(self, __key):
         r = super().__getitem__(__key)
-        if r is None:
-            return ''
-        return r
+        return "" if r is None else r
     
     def __setitem__(self, __key, __value) -> None:
         if not isinstance(__key, str):

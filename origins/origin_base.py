@@ -1,6 +1,7 @@
 from __future__ import annotations
 from abc import ABCMeta, abstractmethod
 from io import BytesIO
+from enum import Enum
 
 class Origin(metaclass=ABCMeta):
     @abstractmethod
@@ -19,3 +20,16 @@ class OriginData:
 
 class DeletedException(BaseException):
     pass
+
+class OriginType(Enum):
+    Twitter = 'twitter'
+    Pixiv = 'pixiv'
+    Niconico = 'niconico'
+    Fanbox = 'fanbox'
+
+    @classmethod
+    def from_str(cls, s: str):
+        for o in cls:
+            if o.value == s.lower():
+                return o
+        raise ValueError

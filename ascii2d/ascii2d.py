@@ -8,6 +8,7 @@ from io import BytesIO, BufferedReader
 from typing import Any
 from pathlib import Path
 from bs4 import BeautifulSoup, Tag
+from origins import OriginType
 from PicImageSearch.ascii2d import Ascii2D as PISAscii2d
 import asyncio_atexit
 
@@ -94,7 +95,7 @@ def parse_ascii2d_result(item_box:Tag) -> Ascii2dResult:
     size = info[0]
     detail_box = item_box.find_next(attrs={'class': 'detail-box'})
     link = detail_box.find_next('a')
-    origin = parse_origin(detail_box.find_next('img').get(key='alt'))
+    origin = OriginType.from_str(detail_box.find_next('img').get(key='alt'))
     author_e = link.find_next('a')
 
     thumbnail_link = f"https://ascii2d.net{item_box.find_next(attrs={'class': 'image-box'}).find_next('img').get(key='src')}"
@@ -113,17 +114,6 @@ def parse_ascii2d_result(item_box:Tag) -> Ascii2dResult:
     author_link = author_e['href']
     id = urlparse(str(orig_link)).path.split('/')[-1]
     return Ascii2dResult(thumbnail_link,md5_hash,width,height,extension,file_size,image_size,origin,orig_link,title,author,author_link,None,id)
-
-def parse_origin(origin: str) -> OriginType:
-    match origin.lower():
-        case "twitter":
-            return OriginType.Twitter
-        case "pixiv":
-            return OriginType.Pixiv
-        case "niconico":
-            return OriginType.Niconico
-        case "fanbox":
-            return OriginType.Fanbox
 
 class PISAscii2dExtend(PISAscii2d):
     def __init__(self, **request_kwargs: Any):
@@ -148,14 +138,6 @@ class PISAscii2dExtend(PISAscii2d):
             resp_text, resp_url, _ = await self.get(resp_url.replace("/color/", "/bovw/"))
 
         return resp_text, resp_url
-
-
-class OriginType(Enum):
-    Twitter = 'twitter'
-    Pixiv = 'pixiv'
-    Niconico = 'niconico'
-    Fanbox = 'fanbox'
-
 
 class SortOrder(Enum):
     No = 0
