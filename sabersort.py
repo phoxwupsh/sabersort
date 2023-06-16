@@ -36,24 +36,35 @@ class Sabersort():
         target_img_list = self.get_target_list(src_img_list)
 
         for item in target_img_list:
-            res = await self.ascii2d.search(item)
-            await self.__results_handler(item, res)
+            await self.__sort_process(item)
     
-    async def __results_handler(self, src_img_path:str, results: list[Ascii2dResult]):
-        prefered = self.ascii2d.get_prefered_results(results)
+    async def __sort_process(self, src_path: str):
+        ctx = await SaberContext.with_hasher(src_path, self.hasher)
+        await ctx.search(self.ascii2d)
+        await self.__results_handler(ctx)
+        if ctx.is_found():
+            await self.__found_handler(ctx)
+            if not ctx.is_deleted():
+                await self.__finally_handler(ctx)
+            else:
+                await self.__deleted_handler(ctx)
+        else:
+            await self.__not_found_handler()
+    
+    async def __results_handler(self, ctx: SaberContext):
+        prefered = self.ascii2d.get_prefered_results(ctx.results)
         index = 0
         ptr = 0
-        src_hash = self.hasher.hash(src_img_path)
         index_out = 0
-        select = None
+        selected = None
         while True:
             try:
                 target = prefered[ptr][index]
                 res = await self.ascii2d.fetch_thumbnail(target)
                 tmp_img = Image.open(res)
                 target_hash = self.hasher.hash(tmp_img)
-                if self.__is_identical(src_hash, target_hash):
-                    select = target
+                if self.__is_identical(ctx.hash, target_hash):
+                    selected = target
                     break
                 index += ptr
                 ptr = (ptr + 1) % 2
@@ -62,24 +73,24 @@ class Sabersort():
                     break
                 index_out += 1
                 continue
-        if select is None:
-            self.__not_found_handler(src_img_path)
+        if selected is None:
             return
-        await self.__found_handler(src_img_path, src_hash, select)
+        ctx.target = selected
+        ctx.found()
 
-    async def __found_handler(self, src_img_path:str, src_hash:ImageHash, target: Ascii2dResult):
+    async def __found_handler(self, ctx: SaberContext):
         origin_handler: Origin = None
-        match target.origin:
+        match ctx.target.origin:
             case OriginType.Pixiv:
                 origin_handler = self.pixiv
             case OriginType.Twitter:
                 origin_handler = self.twitter
         try:
-            origin_data = await origin_handler.fetch_data(target.orig_link)
-            select = await self.__match_origin_variant(origin_handler, src_hash, origin_data)
-            await self.__finally_handler(origin_data.original[select], target)
+            origin_data = await origin_handler.fetch_data(ctx.target.orig_link)
+            select = await self.__match_origin_variant(origin_handler, ctx.hash, origin_data)
+            ctx.dest_url = origin_data.original[select]
         except DeletedException:
-            await self.__deleted_handler(src_img_path, target)
+            ctx.deleted()
 
     
     async def __match_origin_variant(self, origin_handler: Origin, target_hash: ImageHash, origin_data: OriginData) -> int:
@@ -93,22 +104,22 @@ class Sabersort():
                     break
         return select
     
-    async def __deleted_handler(self, src_img_path:str, result:Ascii2dResult):
-        file_name = self.__get_filename(result)
+    async def __deleted_handler(self, ctx: SaberContext):
+        file_name = self.__get_filename(ctx.target)
         file_path = os.path.join(self.config.except_dir, file_name)
-        await asyncio.to_thread(copy(src_img_path, file_path))
+        await asyncio.to_thread(copy(ctx.src_path, file_path))
     
-    async def __finally_handler(self, finally_url:str, target:Ascii2dResult):
-        file_name = self.__get_filename(target)
+    async def __finally_handler(self, ctx: SaberContext):
+        file_name = self.__get_filename(ctx.target)
         file_path = os.path.join(self.config.dist_dir, file_name)
         origin_handler = None
-        match target.origin:
+        match ctx.target.origin:
             case OriginType.Twitter:
                 origin_handler = self.twitter
             case OriginType.Pixiv:
                 origin_handler = self.pixiv
         async with aiofiles.open(os.path.abspath(file_path), 'wb+') as file:
-            res = await origin_handler.fetch_img(finally_url)
+            res = await origin_handler.fetch_img(ctx.dest_url)
             await self.__iter_write_file(res, file)
         self.db.add_img(self.hasher, file_path)
 
@@ -119,8 +130,8 @@ class Sabersort():
                 break
             await dist.write(chunk)
 
-    async def __not_found_handler(self, src_img_path: str):
-        await asyncio.to_thread(copy(src_img_path, self.config.not_found_dir))
+    async def __not_found_handler(self, ctx: SaberContext):
+        await asyncio.to_thread(copy(ctx.src_path, self.config.not_found_dir))
 
     def __is_identical(self, src_hash: ImageHash, target_hash:ImageHash) -> bool:
         return self.__get_bias(src_hash, target_hash) <= self.config.threshold
@@ -184,6 +195,41 @@ class SabersortConfig:
         self.threshold = threshold
         self.user_agent = user_agent if not user_agent is None else 'Sabersort'
         self.chunk_size = chunk_size
+
+class SaberContext:
+    def __init__(self, src_path: str) -> None:
+        self.src_path: str = src_path
+        self.hash: ImageHash = None
+        self.target: Ascii2dResult = None
+        self.results: list[Ascii2dResult] = None
+        self.dest_url: str = None
+        self.__found = False
+        self.__deleted = False
+    
+    @classmethod
+    async def with_hasher(cls, src_path: str, hasher: Hasher):
+        self = cls(src_path)
+        async with aiofiles.open(self.src_path, "rb") as file:
+            buf = await file.read()
+            img = Image.open(BytesIO(buf))
+            self.hash = hasher.hash(img)
+            return self
+    
+    async def search(self, searcher: Ascii2d):
+        res = await searcher.search(self.src_path)
+        self.results = res
+    
+    def is_found(self) -> bool:
+        return self.__found
+    
+    def found(self):
+        self.__found = True
+    
+    def is_deleted(self) -> bool:
+        return self.__deleted
+
+    def deleted(self):
+        self.__deleted = True
 
 class FileNameFmt(dict):
     def __missing__(self, key):
