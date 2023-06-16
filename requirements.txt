@@ -3,6 +3,7 @@ aiohttp==3.8.3
 asyncio_atexit==1.0.1
 beautifulsoup4==4.12.2
 ImageHash==4.3.1
+packaging==21.3
 PicImageSearch==3.9.2
 Pillow==9.5.0
 selenium==4.10.0
