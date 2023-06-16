@@ -1,14 +1,14 @@
 from __future__ import annotations
 from abc import ABCMeta, abstractmethod
-from io import BufferedRandom
+from io import BytesIO
 
 class Origin(metaclass=ABCMeta):
     @abstractmethod
-    def fetch_data(self, url: str) -> OriginData:
+    async def fetch_data(self, url: str) -> OriginData:
         raise NotImplementedError
     
     @abstractmethod
-    def fetch_img(self, url: str, dist: BufferedRandom):
+    async def fetch_img(self, url: str) -> BytesIO:
         raise NotImplementedError
 
 class OriginData:

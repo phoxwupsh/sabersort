@@ -15,16 +15,19 @@ Sabersort會將你的圖片，逐個透過[二次元画像詳細検索](https://
     pip install -r requirements.txt
 
 - [Google Chrome](https://www.google.com/chrome/)
-- Beautiful Soup 4.11.1
-- ImageHash 4.3.1
-- Pillow 9.2.0
-- requests 2.28.1
-- Selenium 4.5.0
-- Webdriver Manager 3.8.4
-- packaging 21.3
-- undetected_chromedriver 3.2.0
+- aiofiles==23.1.0
+- aiohttp==3.8.3
+- asyncio_atexit==1.0.1
+- beautifulsoup4==4.12.2
+- ImageHash==4.3.1
+- packaging==21.3
+- PicImageSearch==3.9.2
+- Pillow==9.5.0
+- selenium==4.10.0
+- undetected_chromedriver==3.2.0
+- webdriver_manager==3.8.4
 
-以上都準備好時，打開``config.ini``，你會看到：
+以上都準備好時，將``config.ini.template``重新命名成``config.ini``後打開，你會看到：
 
     [sabersort]
     Input directory = 
@@ -33,7 +36,6 @@ Sabersort會將你的圖片，逐個透過[二次元画像詳細検索](https://
     Exception directory = 
     Filename = {origin}-{author_id}-{id}
     Threshold = 10
-    Thread = 3
     User-agent = 
 
     [saberdb]
@@ -68,7 +70,6 @@ Sabersort會將你的圖片，逐個透過[二次元画像詳細検索](https://
         + ``{id}``：圖片的id，推特的話是貼文的id。
         + ``{index}``：同一個圖片id裡面可能會有超過1張圖片，這是用來識別是第幾張圖片的。
     + ``Threshold``：圖片相似度的容許度，基本上沒必要修改，改高一點的話可能會找到一些差分。
-    + ``Thread``：平行處理數量，因為ascii2d.net有併發限制，3是極限，如果有問題的話可以降低這個數字。
     + ``User-agent``：直接去[這個網站](https://www.whatsmyua.info/)把文字輸入框裡面的字複製貼上到這裡就可以了。
 + ``[saberdb]``
     + ``Database path``：資料庫路徑，基本上不用改。
