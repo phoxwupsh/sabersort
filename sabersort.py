@@ -9,14 +9,12 @@ from hasher import Hasher, HashAlg
 from ascii2d import Ascii2d, Ascii2dConfig, Ascii2dResult, OriginType, SortOrder
 from origins import Origin, OriginData, DeletedException
 from glob import glob
-from utils import split_list
+from utils import split_list, async_write_file, async_copyfile
 from origins.pixiv import Pixiv, PixivConfig
 from origins.twitter import Twitter, TwitterConfig
 import os.path
 from configparser import RawConfigParser
-from shutil import copy
 from PIL import Image, UnidentifiedImageError
-from aiofiles.threadpool.binary import AsyncFileIO
 import aiofiles
 import asyncio
 
@@ -107,7 +105,7 @@ class Sabersort():
     async def __deleted_handler(self, ctx: SaberContext):
         file_name = self.__get_filename(ctx.target)
         file_path = os.path.join(self.config.except_dir, file_name)
-        await asyncio.to_thread(copy(ctx.src_path, file_path))
+        await async_copyfile(ctx.src_path, file_path)
     
     async def __finally_handler(self, ctx: SaberContext):
         file_name = self.__get_filename(ctx.target)
@@ -120,18 +118,11 @@ class Sabersort():
                 origin_handler = self.pixiv
         async with aiofiles.open(os.path.abspath(file_path), 'wb+') as file:
             res = await origin_handler.fetch_img(ctx.dest_url)
-            await self.__iter_write_file(res, file)
+            await async_write_file(res, file)
         self.db.add_img(self.hasher, file_path)
 
-    async def __iter_write_file(self, src: BytesIO, dist: AsyncFileIO):
-        while True:
-            chunk = src.read(4096)
-            if not chunk:
-                break
-            await dist.write(chunk)
-
     async def __not_found_handler(self, ctx: SaberContext):
-        await asyncio.to_thread(copy(ctx.src_path, self.config.not_found_dir))
+        await async_copyfile(ctx.src_path, self.config.not_found_dir)
 
     def __is_identical(self, src_hash: ImageHash, target_hash:ImageHash) -> bool:
         return self.__get_bias(src_hash, target_hash) <= self.config.threshold
