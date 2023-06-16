@@ -24,7 +24,6 @@ Sabersort會將你的圖片，逐個透過[二次元画像詳細検索](https://
 - PicImageSearch==3.9.2
 - Pillow==9.5.0
 - selenium==4.10.0
-- undetected_chromedriver==3.2.0
 - webdriver_manager==3.8.4
 
 以上都準備好時，將``config.ini.template``重新命名成``config.ini``後打開，你會看到：
@@ -109,14 +108,3 @@ Sabersort會將你的圖片，逐個透過[二次元画像詳細検索](https://
 - [ ] log紀錄檔
 - [ ] 圖形化使用者介面
 - [ ] 其他以圖搜圖網站的支援(例如iqdb)
-
-## 關於為什麼我要寫Sabersort
-
-只要你也有加Saber Chen(Lure Rabbit)的Facebook好友，基本上你每天都會被各種很香的東西洗版。鑑於Facebook上各粉絲專頁及用戶的智慧財產權觀念程度不同，並非所有人都會在貼文中附上來源資訊；即使附上了來源資訊，若只是順手按下儲存鍵，不論是Facebook或Twitter，皆無法依其預設儲存檔名推斷來源資訊，不只要找到喜歡的創作者更加困難，也是變相減少該名創作者的收益。綜上所述，我要在此感謝Saber給了我這個靈感，若沒有他每天堅持不懈地分享這些事物，Sabersort不會誕生。
-
-以上都是過去式了，現在他交了一個可愛的女友，也不再分享那些東西。在這段期間他憑藉對VTuber產業的瞭解，與朋友共同成立成立極具前瞻性的[Lumina Works](https://www.facebook.com/LuminaWorks)，在台灣VTUber產業還在發展的時期，提供業界穩定且可靠的高品質音樂。他也在個人的創作上作出許多突破，起飛到無法想像的程度，直接看下面作品集聽歌可以比較直觀的理解他有多帥。
-
-## 各種作品集
-- [SoundCloud](https://soundcloud.com/lurerabbit)
-- [Portfolio](foriio.com/lure-rabbit)
-- [Patreon](https://www.patreon.com/lurerabbit)
