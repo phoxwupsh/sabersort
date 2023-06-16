@@ -88,10 +88,10 @@ class ImageEntry:
     path: str
 
 class SaberDBConfig:
-    def __init__(self, db_path: str = 'saberdb.db', check_db:bool=False, threads: int = 0) -> None:
+    def __init__(self, db_path: str = 'saberdb.db', check_db:bool=False, threads: int=None) -> None:
         self.db_path = db_path
         self.check_db = check_db
-        self.threads = threads if threads > 0 else cpu_count()
+        self.threads = cpu_count() if threads is None or threads < 1 else threads
 
 if __name__ == "__main__":
     pass

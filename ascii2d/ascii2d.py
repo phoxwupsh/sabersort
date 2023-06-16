@@ -140,9 +140,16 @@ class PISAscii2dExtend(PISAscii2d):
         return resp_text, resp_url
 
 class SortOrder(Enum):
-    No = 0
-    ImageSize = 1
-    FileSize =2
+    No = 'no'
+    ImageSize = 'imagesize'
+    FileSize = 'filesize'
+
+    @classmethod
+    def from_str(cls, s: str):
+        for o in cls:
+            if o.value == s.lower():
+                return o
+        raise ValueError
 
 class Ascii2dConfig:
     def __init__(self, user_agent: str = None, sort_order: SortOrder = SortOrder.No, first: int = 0, prefered: OriginType = OriginType.Pixiv) -> None:

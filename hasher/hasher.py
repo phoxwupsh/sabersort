@@ -33,13 +33,20 @@ class Hasher():
         return self.__hasher__(Image.open(img), self.hash_size)
 
 class HashAlg(Enum):
-    Average = 1
-    Perceptual = 2
-    PerceptualSimple = 3
-    Difference = 4
-    Wavelet = 5 
-    HSV = 6
-    CropResistant = 7
+    Average = 'average'
+    Perceptual = 'perceptual'
+    PerceptualSimple = 'perceptualsimple'
+    Difference = 'difference'
+    Wavelet = 'wavelet'
+    HSV = 'hsv'
+    CropResistant = 'cropresistant'
+
+    @classmethod
+    def from_str(cls, s: str):
+        for o in cls:
+            if o.value == s.lower():
+                return o
+        raise ValueError
 
 if __name__ == "__main__":
     pass
