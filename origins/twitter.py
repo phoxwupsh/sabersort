@@ -11,9 +11,9 @@ from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
 from io import BytesIO
-import atexit
 from aiohttp import ClientSession
 from urllib.parse import urlparse, urlunparse, urlencode, parse_qs
+import asyncio_atexit
 
 NAMES = ['thumb', 'small', 'medium', 'large', 'orig']
 BLOCK_XPATH = '/html/body/div[1]/div/div/div[2]/main/div/div/div/div/div/section/div/div/div[1]/div/div/article/div/div/div[3]/div[3]/div/div/div/div/div[2]/div/div[2]'
@@ -32,11 +32,11 @@ class Twitter(Origin):
         self.__chrome_caps = DesiredCapabilities().CHROME
         self.__chrome_caps["pageLoadStrategy"] = "eager"
         self.drivers = dict[str, Chrome]()
-        atexit.register(self.__cleanup)
 
     def __init_chrome(self, name:str):
         options = ChromeOptions()
         options.add_argument('--disable-gpu')
+        options.add_argument("--blink-settings=imagesEnabled=false")
 
         self.drivers[name] = Chrome(service=self.__chrome_service, desired_capabilities=self.__chrome_caps, options=options)
         self.drivers[name].get('https://twitter.com')
@@ -47,6 +47,7 @@ class Twitter(Origin):
             self.session = ClientSession()
             if not self.config.user_agent is None:
                 self.session.headers.update({'user-agent':self.config.user_agent})
+        asyncio_atexit.register(self.__cleanup)
         return self.session
 
     async def fetch_data(self, target:str)-> list[str] | None:
@@ -81,7 +82,9 @@ class Twitter(Origin):
             buf = await res.content.read()
             return BytesIO(buf)
     
-    def __cleanup(self):
+    async def __cleanup(self):
+        if not self.session is None:
+            await self.session.close()
         for driver in self.drivers.values():
             driver.quit()
 

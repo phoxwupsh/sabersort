@@ -6,6 +6,7 @@ from bs4 import BeautifulSoup
 from json import loads
 from urllib.parse import urlparse, urlunparse
 from io import BytesIO
+import asyncio_atexit
 
 class Pixiv(Origin):
     def __init__(self, config:PixivConfig):
@@ -18,6 +19,7 @@ class Pixiv(Origin):
             self.session = ClientSession(cookies=cookies)
             if not self.config.user_agent is None:
                 self.session.headers.update({'user-agent':self.config.user_agent})
+        asyncio_atexit.register(self.__cleanup)
         return self.session
     
     async def fetch_data(self, url: str) -> OriginData:
@@ -46,6 +48,10 @@ class Pixiv(Origin):
         async with session.get(url) as res:
             buf = await res.content.read()
             return BytesIO(buf)
+    
+    async def __cleanup(self):
+        if not self.session is None:
+            await self.session.close()
 
 def get_page_url(url: str, page: int):
     parsed = urlparse(url)

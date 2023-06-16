@@ -9,6 +9,7 @@ from typing import Any
 from pathlib import Path
 from bs4 import BeautifulSoup, Tag
 from PicImageSearch.ascii2d import Ascii2D as PISAscii2d
+import asyncio_atexit
 
 class Ascii2d():
     def __init__(self, config: Ascii2dConfig) -> None:
@@ -33,11 +34,12 @@ class Ascii2d():
         self.__sort_result(result)
         return result
 
-    async def get_session(self) -> ClientSession:
+    async def __get_session(self) -> ClientSession:
         if self.session is None:
             self.session = ClientSession()
             if not self.config.user_agent is None:
                 self.session.headers.update({'user-agent':self.config.user_agent})
+        asyncio_atexit.register(self.__cleanup)
         return self.session
 
     def __sort_result(self, results: list[Ascii2dResult]):
@@ -68,15 +70,14 @@ class Ascii2d():
         return pref, non_pref
     
     async def fetch_thumbnail(self, target: Ascii2dResult) -> BytesIO:
-        session = await self.get_session()
+        session = await self.__get_session()
         async with session.get(target.thumbnail_link) as res:
             buf = await res.content.read()
             return BytesIO(buf)
             
-    
-    # def __cleanup(self):
-    #     for driver in self.drivers.values():
-    #         driver.quit()
+    async def __cleanup(self):
+        if not self.session is None:
+            await self.session.close()
         
 
 def get_md5(file: BufferedReader, chunk_size: int = 1024) -> str:
