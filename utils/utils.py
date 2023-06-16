@@ -25,3 +25,16 @@ async def async_write_file(src: BytesIO, dist: AsyncFileIO):
         if not chunk:
             break
         await dist.write(chunk)
+
+class FileNameFmt(dict):
+    def __missing__(self, key):
+        return f"{key}"
+    
+    def __getitem__(self, __key):
+        r = super().__getitem__(__key)
+        return "" if r is None else r
+    
+    def __setitem__(self, __key, __value) -> None:
+        if not isinstance(__key, str):
+            raise IndexError
+        return super().__setitem__(__key, __value)
