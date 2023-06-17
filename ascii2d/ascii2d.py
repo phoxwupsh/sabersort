@@ -1,10 +1,9 @@
 from __future__ import annotations
 from dataclasses import dataclass
-from urllib.parse import urlparse
+from urllib.parse import urlparse, parse_qs
 from aiohttp import ClientSession
-from hashlib import md5
 from enum import Enum
-from io import BytesIO, BufferedReader
+from io import BytesIO
 from typing import Any
 from pathlib import Path
 from bs4 import BeautifulSoup, Tag
@@ -18,14 +17,11 @@ class Ascii2d():
         self.session = None
         self.__internal = PISAscii2dExtend()
     
-    async def search(self, img_path:str) -> list[Ascii2dResult]:
-        hash = None
+    async def search(self, img_path: str, md5: str=None) -> list[Ascii2dResult]:
         result = None
-        with open(img_path, "rb") as img:
-            hash = get_md5(img)
-        
-        resp_text_md5, _ = await self.__internal.search_md5_raw(hash)
-        result = self.__parse_ascii2d_resp(resp_text_md5)
+        if not md5 is None:
+            resp_text_md5, _ = await self.__internal.search_md5_raw(md5)
+            result = self.__parse_ascii2d_resp(resp_text_md5)
         if len(result) > 0:
             self.__sort_result(result)
             return result
@@ -57,9 +53,11 @@ class Ascii2d():
         rs = soup.find_all(attrs={'class':'item-box'})
         results = list[Ascii2dResult]()
         for r in rs:
-            parsed = parse_ascii2d_result(r)
-            if not parsed.origin == None:
+            try:
+                parsed = parse_ascii2d_result(r)
                 results.append(parsed)
+            except Ascii2dParseError:
+                continue
         if len(results) > self.config.first and self.config.first > 0:
             results = results[:self.config.first]
         self.__sort_result(results)
@@ -79,41 +77,52 @@ class Ascii2d():
     async def __cleanup(self):
         if not self.session is None:
             await self.session.close()
-        
-
-def get_md5(file: BufferedReader, chunk_size: int = 1024) -> str:
-    h = md5()
-    c = file.read(chunk_size)
-    while c:
-        h.update(c)
-        c = file.read(chunk_size)
-    return h.hexdigest()
+    
 
 def parse_ascii2d_result(item_box:Tag) -> Ascii2dResult:
-    md5_e = item_box.find_next(attrs={'class': 'hash'})
-    info  = md5_e.find_next('small').decode_contents().split(' ')
-    size = info[0]
-    detail_box = item_box.find_next(attrs={'class': 'detail-box'})
-    link = detail_box.find_next('a')
-    origin = OriginType.from_str(detail_box.find_next('img').get(key='alt'))
-    author_e = link.find_next('a')
+    try:
+        md5_e = item_box.find_next(attrs={'class': 'hash'})
+        info  = md5_e.find_next('small').decode_contents().split(' ')
+        size = info[0]
+        detail_box = item_box.find_next(attrs={'class': 'detail-box'})
+        link = detail_box.find_next('a')
+        origin = OriginType.from_str(detail_box.find_next('img').get(key='alt'))
+        author_e = link.find_next('a')
 
-    thumbnail_link = f"https://ascii2d.net{item_box.find_next(attrs={'class': 'image-box'}).find_next('img').get(key='src')}"
-    md5_hash = md5_e.decode_contents()
-    width = int(size.split('x')[0])
-    height = int(size.split('x')[1])
-    extension = info[1].lower()
-    if extension == 'jpeg':
-        extension = 'jpg'
-    file_size = float(info[2].split('KB')[0])
-    image_size = width*height
+        thumbnail_link = f"https://ascii2d.net{item_box.find_next(attrs={'class': 'image-box'}).find_next('img').get(key='src')}"
+        md5_hash = md5_e.decode_contents()
+        width = int(size.split('x')[0])
+        height = int(size.split('x')[1])
+        extension = info[1].lower()
+        if extension == 'jpeg':
+            extension = 'jpg'
+        file_size = float(info[2].split('KB')[0])
+        image_size = width*height
 
-    orig_link = link['href']
-    title = link.decode_contents()
-    author = author_e.decode_contents()
-    author_link = author_e['href']
-    id = urlparse(str(orig_link)).path.split('/')[-1]
-    return Ascii2dResult(thumbnail_link,md5_hash,width,height,extension,file_size,image_size,origin,orig_link,title,author,author_link,None,id)
+        orig_link = link['href']
+        title = link.decode_contents()
+        author = author_e.decode_contents()
+        author_link:str = author_e['href']
+
+        author_id = ""
+        parsed_author = urlparse(author_link)
+        match origin:
+            case OriginType.Twitter:
+                try:
+                    author_id = parse_qs(parsed_author.query)['user_id'][0]
+                except KeyError:
+                    author_id = parsed_author.path.split('/')[-1]
+            case OriginType.Pixiv:
+                author_id = parsed_author.path.split('/')[-1]
+        
+        id = urlparse(str(orig_link)).path.split('/')[-1]
+
+        return Ascii2dResult(thumbnail_link,md5_hash,width,height,extension,file_size,image_size,origin,orig_link,title,author, author_id,author_link,None,id)
+    except ValueError:
+        raise Ascii2dParseError
+
+class Ascii2dParseError(BaseException):
+    pass
 
 class PISAscii2dExtend(PISAscii2d):
     def __init__(self, **request_kwargs: Any):
@@ -172,6 +181,7 @@ class Ascii2dResult:
     orig_link:str
     title:str
     author:str
+    author_id: str
     author_link:str
     index: int
     id: str
