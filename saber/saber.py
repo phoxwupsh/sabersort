@@ -3,11 +3,13 @@ from imagehash import ImageHash
 from io import BytesIO
 from origins import Origin, OriginData, DeletedException
 from glob import glob
-from utils import async_write_file, async_copyfile, is_identical, format_filename, context_to_record
+from utils import async_write_file, async_copyfile, is_identical
 import os.path
+from os import stat
 from saber.context import SaberContext
+from saberdb.model import SaberRecord
 from saberdb import SaberDB
-from ascii2d import Ascii2d, OriginType
+from ascii2d import Ascii2d, Ascii2dResult, OriginType
 from hasher import Hasher
 from origins.pixiv import Pixiv
 from origins.twitter import Twitter
@@ -148,3 +150,31 @@ class SaberConfig:
         self.threads = cpu_count()
         self.threshold = threshold
         self.user_agent = user_agent
+
+class FileNameFmt(dict):
+    def __missing__(self, key):
+        return f"{key}"
+    
+    def __getitem__(self, __key):
+        r = super().__getitem__(__key)
+        return "" if r is None else r
+    
+    def __setitem__(self, __key, __value) -> None:
+        if not isinstance(__key, str):
+            raise IndexError
+        return super().__setitem__(__key, __value)
+
+def context_to_record(ctx: SaberContext) -> SaberRecord:
+    return SaberRecord(str(ctx.hash), ctx.target.author, ctx.target.author_id, ctx.target.author_link, ctx.target.width, ctx.target.height, ctx.target.orig_link, ctx.dest_path, stat(ctx.dest_path).st_size)
+
+def format_filename(filename_fmt: str, target:Ascii2dResult) -> str:
+        d = {
+            'origin': target.origin.value,
+            'author': target.author,
+            'author_id': target.author_id,
+            'title': target.title,
+            'id': target.id,
+            'index': str(target.index)
+        }
+        fd = FileNameFmt(d)
+        return f'{filename_fmt.format_map(fd)}.{target.extension}'
