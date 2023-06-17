@@ -74,7 +74,7 @@ Sabersort會將你的圖片，逐個透過[二次元画像詳細検索](https://
     + ``threshold``：圖片相似度的容許度，基本上沒必要修改，改高一點的話可能會找到一些差分。
     + ``user_agent``：直接去[這個網站](https://www.whatsmyua.info/)把文字輸入框裡面的字複製貼上到這裡就可以了。
 + ``[saberdb]``
-    + ``database_path``：資料庫路徑，基本上不用改。
+    + ``database_path``：資料庫路徑，什麼都不輸入的話預設會是同資料夾底下的``saberdb.db``，基本上不用改。
 + ``[hasher]``
     + ``hash_algorithm``：用來判斷圖片是否相似的演算法，具體差異參考[這裡](https://github.com/JohannesBuchner/imagehash)，你有以下選擇：
         + ``Average``
