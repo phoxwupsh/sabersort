@@ -56,6 +56,7 @@ Sabersort會將你的圖片，逐個透過[二次元画像詳細検索](https://
 
     [twitter]
     auth_token = ''
+    headless = true
 
 以下是各欄位的說明，輸入資料的時候別忘了原本有就兩個單引號(`'`)的欄位，要把資料輸入在兩個單引號中間。
 
@@ -98,6 +99,7 @@ Sabersort會將你的圖片，逐個透過[二次元画像詳細検索](https://
     + ``PHPSESSID``：把Pixiv的cookies複製到這裡，不知道怎麼找可以看[這裡](https://developer.chrome.com/docs/devtools/application/cookies/)，進入Pixiv網站後，它會在``pixiv.net``底下。
 + ``[twitter]``
     + ``auth_token``：一樣是cookies，只是要進去Twitter網站，它會在``twitter.com``底下。
+    + ``headless``：是否在調用推特時啟用headless模式，預設是``true``，如果改成``false``的話調用下載推特圖片的時候會有Chrome視窗跑出來。
 
 ## 怎麼用？
 

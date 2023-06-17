@@ -25,3 +25,4 @@ PHPSESSID = ''
 
 [twitter]
 auth_token = ''
+headless = true

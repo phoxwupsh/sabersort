@@ -41,7 +41,8 @@ if __name__ == '__main__':
     pixiv = Pixiv(pixiv_cfg)
 
     auth_token: str = config['twitter']['auth_token']
-    twitter_cfg = TwitterConfig(auth_token,user_agent)
+    headless: bool = config['twitter']['headless']
+    twitter_cfg = TwitterConfig(auth_token, user_agent, headless)
     twitter = Twitter(twitter_cfg)
     
     saber = Saber(sabersort_cfg, ascii2d, hasher, db, pixiv, twitter)

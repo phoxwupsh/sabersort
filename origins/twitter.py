@@ -27,17 +27,20 @@ class Twitter(Origin):
         self.config = config
         self.session = None
         self.__driver_manager = ChromeDriverManager()
-        self.__driver_path = self.__driver_manager.install()
         self.__driver: WebDriver = None
 
     def __get_driver(self) -> WebDriver:
         if self.__driver is None:
+            driver_path = self.__driver_manager.install()
             options = ChromeOptions()
             options.add_argument('--disable-gpu')
             options.add_argument("--blink-settings=imagesEnabled=false")
             options.add_argument("--disable-blink-features=automationcontrolled")
+            if self.config.headless:
+                options.add_argument('--headless')
+                options.add_argument(f'--user-agent={self.config.user_agent}')
 
-            service = Service(self.__driver_path)
+            service = Service(driver_path)
             caps = DesiredCapabilities().CHROME
             caps["pageLoadStrategy"] = "eager"
 
@@ -103,9 +106,10 @@ class TwitterDeletedException(DeletedException):
     pass
 
 class TwitterConfig:
-    def __init__(self, auth_token:str, user_agent: str) -> None:
+    def __init__(self, auth_token:str, user_agent: str, headless: bool=True) -> None:
         self.auth_token = auth_token
         self.user_agent = user_agent
+        self.headless = headless
 
 @dataclass
 class TwitterUrls:
