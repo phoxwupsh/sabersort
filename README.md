@@ -40,7 +40,6 @@ Sabersort會將你的圖片，逐個透過[二次元画像詳細検索](https://
 
     [saberdb]
     database_path = ''
-    check_database = true
 
     [hasher]
     hash_algorithm = 'Perceptual'
@@ -76,7 +75,6 @@ Sabersort會將你的圖片，逐個透過[二次元画像詳細検索](https://
     + ``user_agent``：直接去[這個網站](https://www.whatsmyua.info/)把文字輸入框裡面的字複製貼上到這裡就可以了。
 + ``[saberdb]``
     + ``database_path``：資料庫路徑，基本上不用改。
-    + ``check_database``：要不要檢查資料庫去除已失效或刪除的圖片，改成``false``就不檢查，但這其實不會花多少時間，建議維持``true``。
 + ``[hasher]``
     + ``hash_algorithm``：用來判斷圖片是否相似的演算法，具體差異參考[這裡](https://github.com/JohannesBuchner/imagehash)，你有以下選擇：
         + ``Average``
@@ -99,7 +97,7 @@ Sabersort會將你的圖片，逐個透過[二次元画像詳細検索](https://
     + ``PHPSESSID``：把Pixiv的cookies複製到這裡，不知道怎麼找可以看[這裡](https://developer.chrome.com/docs/devtools/application/cookies/)，進入Pixiv網站後，它會在``pixiv.net``底下。
 + ``[twitter]``
     + ``auth_token``：一樣是cookies，只是要進去Twitter網站，它會在``twitter.com``底下。
-    + ``headless``：是否在調用推特時啟用headless模式，預設是``true``，如果改成``false``的話調用下載推特圖片的時候會有Chrome視窗跑出來。
+    + ``headless``：是否在調用推特時啟用headless模式，預設是``true``，如果改成``false``的話下載推特圖片的時候會有Chrome視窗跑出來。
 
 ## 怎麼用？
 

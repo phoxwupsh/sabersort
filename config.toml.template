@@ -9,7 +9,6 @@ user_agent = ''
 
 [saberdb]
 database_path = ''
-check_database = true
 
 [hasher]
 hash_algorithm = 'Perceptual'
