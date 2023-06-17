@@ -1,6 +1,6 @@
 from __future__ import annotations
 from dataclasses import dataclass
-from .origin_base import Origin, OriginData, DeletedException
+from .origin import Origin, OriginData, DeletedException
 from selenium.webdriver import Chrome, ChromeOptions
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait

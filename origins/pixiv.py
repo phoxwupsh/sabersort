@@ -1,5 +1,5 @@
 from __future__ import annotations
-from .origin_base import Origin, OriginData, DeletedException
+from origins import Origin, OriginData, DeletedException
 from dataclasses import dataclass
 from aiohttp import ClientSession
 from bs4 import BeautifulSoup
