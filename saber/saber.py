@@ -1,3 +1,4 @@
+from __future__ import annotations
 from imagehash import ImageHash
 from io import BytesIO
 from origins import Origin, OriginData, DeletedException
@@ -5,7 +6,6 @@ from glob import glob
 from utils import async_write_file, async_copyfile, is_identical, format_filename, context_to_record
 import os.path
 from saber.context import SaberContext
-from saber.config import SabersortConfig
 from saberdb import SaberDB
 from ascii2d import Ascii2d, OriginType
 from hasher import Hasher
@@ -13,10 +13,11 @@ from origins.pixiv import Pixiv
 from origins.twitter import Twitter
 from PIL import Image, UnidentifiedImageError
 from hashlib import md5
+from multiprocessing import cpu_count
 import aiofiles
 
 class Saber():
-    def __init__(self, config:SabersortConfig, ascii2d: Ascii2d, hasher: Hasher, db: SaberDB, pixiv:Pixiv, twitter:Twitter) -> None:
+    def __init__(self, config: SaberConfig, ascii2d: Ascii2d, hasher: Hasher, db: SaberDB, pixiv:Pixiv, twitter:Twitter) -> None:
         self.config = config
         self.ascii2d = ascii2d
         self.hasher = hasher
@@ -136,3 +137,14 @@ class Saber():
 
     async def __not_found_handler(self, ctx: SaberContext):
         await async_copyfile(ctx.src_path, self.config.not_found_dir)
+
+class SaberConfig:
+    def __init__(self, src_dir:str, dist_dir:str, not_found_dir:str, except_dir:str, filename_fmt: str, threshold: int = 0, user_agent: str = None) -> None:
+        self.src_dir = src_dir
+        self.dist_dir = dist_dir
+        self.not_found_dir = not_found_dir
+        self.except_dir = except_dir
+        self.filename_fmt = filename_fmt
+        self.threads = cpu_count()
+        self.threshold = threshold
+        self.user_agent = user_agent

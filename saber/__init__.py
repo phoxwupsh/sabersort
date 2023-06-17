@@ -1,1 +1,1 @@
-from .saber import Saber
+from .saber import Saber, SaberConfig
