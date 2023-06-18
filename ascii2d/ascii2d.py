@@ -21,7 +21,7 @@ class Ascii2d:
         self.session = None
         self.__internal = PISAscii2dExtend()
 
-    async def search(self, img_path: str, md5: str = None) -> list[Ascii2dResult]:
+    async def search(self, img_path: str | Path, md5: str = None) -> list[Ascii2dResult]:
         result = None
         if md5 is not None:
             resp_text_md5, _ = await self.__internal.search_md5_raw(md5)

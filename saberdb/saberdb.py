@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import atexit
 
-from genericpath import isfile
+from os.path import isfile
 from imagehash import ImageHash, ImageMultiHash
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -19,7 +19,7 @@ class SaberDB:
         self.db = session()
         atexit.register(self.__cleanup)
 
-    def is_img_in_db_and_valid(self, hash: ImageHash| ImageMultiHash) -> tuple[bool, bool]:
+    def is_img_in_db_and_valid(self, hash: ImageHash | ImageMultiHash) -> tuple[bool, bool]:
         target = self.get(hash)
         if target is None:
             return False, False

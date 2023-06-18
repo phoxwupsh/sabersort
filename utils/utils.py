@@ -1,5 +1,6 @@
 from io import BufferedIOBase
 from typing import Any
+from pathlib import Path
 
 import aiofiles
 from aiofiles.threadpool.binary import AsyncBufferedIOBase
@@ -11,7 +12,7 @@ def split_list(list_: list[Any], n: int) -> list[list[Any]]:
     return [list_[i * k + min(i, m) : (i + 1) * k + min(i + 1, m)] for i in range(n)]
 
 
-async def async_copyfile(src: str, dst: str, chunk_size: int = 4096):
+async def async_copyfile(src: str | Path, dst: str | Path, chunk_size: int = 4096):
     async with aiofiles.open(src, 'rb') as r:
         async with aiofiles.open(dst, 'wb+') as w:
             await async_copyfileobj(r, w, chunk_size)
