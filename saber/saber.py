@@ -8,7 +8,7 @@ from multiprocessing import cpu_count
 from os import stat
 
 import aiofiles
-from imagehash import ImageHash
+from imagehash import ImageHash, ImageMultiHash
 from PIL import Image, UnidentifiedImageError
 
 from ascii2d import Ascii2d, Ascii2dResult, OriginType
@@ -59,7 +59,7 @@ class Saber:
 
         ctx = SaberContext(src_path, src_hash, md5_hash.hexdigest())
 
-        in_db, valid = self.db.is_img_in_db_and_valid(ctx)
+        in_db, valid = self.db.is_img_in_db_and_valid(ctx.hash)
         if in_db:
             if valid:
                 return
@@ -67,17 +67,21 @@ class Saber:
                 self.db.delete(ctx.hash)
 
         ctx.results = await self.ascii2d.search(ctx.src_path, ctx.md5)
-        await self.__results_handler(ctx)
-        if ctx.is_found():
-            await self.__found_handler(ctx)
-            if not ctx.is_deleted():
-                await self.__finally_handler(ctx)
-            else:
-                await self.__deleted_handler(ctx)
-        else:
+        try:
+            await self.__match_results(ctx)
+            await self.__match_varaint(ctx)
+            await self.__finally_handler(ctx)
+        except NoMatchResultException:
             await self.__not_found_handler(ctx)
+            print('no result match')
+        except NoMatchVariantException:
+            await self.__deleted_handler(ctx)
+            print('no varaint match')
+        except DeletedException:
+            await self.__deleted_handler(ctx)
+            print('deleted')
 
-    async def __results_handler(self, ctx: SaberContext):
+    async def __match_results(self, ctx: SaberContext):
         prefered = self.ascii2d.get_prefered_results(ctx.results)
         index = 0
         ptr = 0
@@ -94,31 +98,33 @@ class Saber:
                     break
                 index += ptr
                 ptr = (ptr + 1) % 2
-            except IndexError:
+            except (IndexError, UnidentifiedImageError):
                 if index_out >= 2:
                     break
                 index_out += 1
                 continue
         if selected is None:
-            return
-        ctx.found(selected)
+            raise NoMatchResultException
+        ctx.target = selected
 
-    async def __found_handler(self, ctx: SaberContext):
+    async def __match_varaint(self, ctx: SaberContext):
         origin_handler: Origin = None
         match ctx.target.origin:
             case OriginType.Pixiv:
                 origin_handler = self.pixiv
             case OriginType.Twitter:
                 origin_handler = self.twitter
-        try:
-            origin_data = await origin_handler.fetch_data(ctx.target.orig_link)
-            select = await self.__match_origin_variant(origin_handler, ctx.hash, origin_data)
-            ctx.dest_url = origin_data.original[select]
-        except DeletedException:
-            ctx.deleted()
+        if origin_handler is None:
+            raise NotSupportOriginException
+        origin_data = await origin_handler.fetch_data(ctx.target.orig_link)
+        select = await self.__match_origin_variant(origin_handler, ctx.hash, origin_data)
+        ctx.dest_url = origin_data.original[select]
 
     async def __match_origin_variant(
-        self, origin_handler: Origin, target_hash: ImageHash, origin_data: OriginData
+        self,
+        origin_handler: Origin,
+        target_hash: ImageHash | ImageMultiHash,
+        origin_data: OriginData,
     ) -> int:
         select = None
         for i in range(origin_data.variant):
@@ -128,7 +134,9 @@ class Saber:
                 if is_identical(target_hash, tmp_hash, self.config.threshold):
                     select = i
                     break
-        return select
+        if select is not None:
+            return select
+        raise NoMatchVariantException
 
     async def __deleted_handler(self, ctx: SaberContext):
         file_name = format_filename(self.config.filename_fmt, ctx.target)
@@ -151,7 +159,8 @@ class Saber:
         self.db.add(context_to_record(ctx))
 
     async def __not_found_handler(self, ctx: SaberContext):
-        await async_copyfile(ctx.src_path, self.config.not_found_dir)
+        dst_path = os.path.join(self.config.not_found_dir, os.path.basename(ctx.src_path))
+        await async_copyfile(ctx.src_path, dst_path)
 
 
 class SaberConfig:
@@ -173,20 +182,6 @@ class SaberConfig:
         self.threads = cpu_count()
         self.threshold = threshold
         self.user_agent = user_agent
-
-
-class FileNameFmt(dict):
-    def __missing__(self, key):
-        return f"{key}"
-
-    def __getitem__(self, __key):
-        r = super().__getitem__(__key)
-        return "" if r is None else r
-
-    def __setitem__(self, __key, __value) -> None:
-        if not isinstance(__key, str):
-            raise IndexError
-        return super().__setitem__(__key, __value)
 
 
 def context_to_record(ctx: SaberContext) -> SaberRecord:
@@ -212,5 +207,16 @@ def format_filename(filename_fmt: str, target: Ascii2dResult) -> str:
         'id': target.id,
         'index': str(target.index),
     }
-    fd = FileNameFmt(d)
-    return f'{filename_fmt.format_map(fd)}.{target.extension}'
+    return f'{filename_fmt.format_map(d)}.{target.extension}'
+
+
+class NoMatchResultException(BaseException):
+    pass
+
+
+class NoMatchVariantException(BaseException):
+    pass
+
+
+class NotSupportOriginException(BaseException):
+    pass
