@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from enum import Enum
-from os.path import isfile
 
 from imagehash import (
     ImageHash,
+    ImageMultiHash,
     average_hash,
     colorhash,
     crop_resistant_hash,
@@ -35,14 +35,8 @@ class Hasher:
                 self.__hasher__ = crop_resistant_hash
         self.hash_size = hash_size
 
-    def hash(self, img: Image.Image) -> ImageHash | None:
-        if isinstance(img, Image.Image):
-            return self.__hasher__(img, self.hash_size)
-        if not isinstance(img, str):
-            return None
-        if not isfile(img):
-            return None
-        return self.__hasher__(Image.open(img), self.hash_size)
+    def hash(self, img: Image.Image) -> ImageHash | ImageMultiHash:
+        return self.__hasher__(img, self.hash_size)
 
 
 class HashAlg(Enum):

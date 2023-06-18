@@ -3,11 +3,10 @@ from __future__ import annotations
 import atexit
 
 from genericpath import isfile
-from imagehash import ImageHash
+from imagehash import ImageHash, ImageMultiHash
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from saber.context import SaberContext
 from saberdb.model import Base, SaberRecord
 
 
@@ -20,23 +19,23 @@ class SaberDB:
         self.db = session()
         atexit.register(self.__cleanup)
 
-    def is_img_in_db_and_valid(self, ctx: SaberContext) -> tuple[bool, bool]:
-        target = self.get(ctx.hash)
+    def is_img_in_db_and_valid(self, hash: ImageHash| ImageMultiHash) -> tuple[bool, bool]:
+        target = self.get(hash)
         if target is None:
             return False, False
         if not isfile(target.path):
             return True, False
-        return True, target.hash == str(ctx.hash)
+        return True, target.hash == str(hash)
 
     def add(self, item: SaberRecord):
         self.db.add(item)
         self.db.commit()
 
-    def get(self, img_hash: ImageHash) -> SaberRecord | None:
+    def get(self, img_hash: ImageHash | ImageMultiHash) -> SaberRecord | None:
         res = self.db.query(SaberRecord).filter_by(hash=str(img_hash)).one_or_none()
         return res
 
-    def delete(self, img_hash: ImageHash):
+    def delete(self, img_hash: ImageHash | ImageMultiHash):
         self.db.query(SaberRecord).filter_by(hash=str(img_hash)).delete()
         self.db.commit()
 
