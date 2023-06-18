@@ -1,25 +1,37 @@
 from __future__ import annotations
-from imagehash import ImageHash
-from io import BytesIO
-from origins import Origin, OriginData, DeletedException
-from glob import glob
-from utils import async_write_file, async_copyfile, is_identical
+
 import os.path
+from glob import glob
+from hashlib import md5
+from io import BytesIO
+from multiprocessing import cpu_count
 from os import stat
-from saber.context import SaberContext
-from saberdb.model import SaberRecord
-from saberdb import SaberDB
+
+import aiofiles
+from imagehash import ImageHash
+from PIL import Image, UnidentifiedImageError
+
 from ascii2d import Ascii2d, Ascii2dResult, OriginType
 from hasher import Hasher
+from origins import DeletedException, Origin, OriginData
 from origins.pixiv import Pixiv
 from origins.twitter import Twitter
-from PIL import Image, UnidentifiedImageError
-from hashlib import md5
-from multiprocessing import cpu_count
-import aiofiles
+from saber.context import SaberContext
+from saberdb import SaberDB
+from saberdb.model import SaberRecord
+from utils import async_copyfile, async_write_file, is_identical
 
-class Saber():
-    def __init__(self, config: SaberConfig, ascii2d: Ascii2d, hasher: Hasher, db: SaberDB, pixiv:Pixiv, twitter:Twitter) -> None:
+
+class Saber:
+    def __init__(
+        self,
+        config: SaberConfig,
+        ascii2d: Ascii2d,
+        hasher: Hasher,
+        db: SaberDB,
+        pixiv: Pixiv,
+        twitter: Twitter,
+    ) -> None:
         self.config = config
         self.ascii2d = ascii2d
         self.hasher = hasher
@@ -28,12 +40,12 @@ class Saber():
         self.twitter = twitter
 
     async def sort(self):
-        queue = glob(os.path.join(os.path.abspath(self.config.src_dir),'*'))
+        queue = glob(os.path.join(os.path.abspath(self.config.src_dir), '*'))
 
         for item in queue:
             if os.path.isfile(item):
                 await self.__sort_process(item)
-    
+
     async def __sort_process(self, src_path: str):
         async with aiofiles.open(src_path, 'rb') as f:
             buf = await f.read()
@@ -44,7 +56,7 @@ class Saber():
                 src_hash = self.hasher.hash(img)
             except UnidentifiedImageError:
                 return
-        
+
         ctx = SaberContext(src_path, src_hash, md5_hash.hexdigest())
 
         in_db, valid = self.db.is_img_in_db_and_valid(ctx)
@@ -64,7 +76,7 @@ class Saber():
                 await self.__deleted_handler(ctx)
         else:
             await self.__not_found_handler(ctx)
-    
+
     async def __results_handler(self, ctx: SaberContext):
         prefered = self.ascii2d.get_prefered_results(ctx.results)
         index = 0
@@ -105,8 +117,9 @@ class Saber():
         except DeletedException:
             ctx.deleted()
 
-    
-    async def __match_origin_variant(self, origin_handler: Origin, target_hash: ImageHash, origin_data: OriginData) -> int:
+    async def __match_origin_variant(
+        self, origin_handler: Origin, target_hash: ImageHash, origin_data: OriginData
+    ) -> int:
         select = None
         for i in range(origin_data.variant):
             res = await origin_handler.fetch_img(origin_data.thumb[i])
@@ -116,12 +129,12 @@ class Saber():
                     select = i
                     break
         return select
-    
+
     async def __deleted_handler(self, ctx: SaberContext):
         file_name = format_filename(self.config.filename_fmt, ctx.target)
         file_path = os.path.join(self.config.except_dir, file_name)
         await async_copyfile(ctx.src_path, file_path)
-    
+
     async def __finally_handler(self, ctx: SaberContext):
         file_name = format_filename(self.config.filename_fmt, ctx.target)
         file_path = os.path.join(self.config.dist_dir, file_name)
@@ -140,8 +153,18 @@ class Saber():
     async def __not_found_handler(self, ctx: SaberContext):
         await async_copyfile(ctx.src_path, self.config.not_found_dir)
 
+
 class SaberConfig:
-    def __init__(self, src_dir:str, dist_dir:str, not_found_dir:str, except_dir:str, filename_fmt: str, threshold: int = 0, user_agent: str = None) -> None:
+    def __init__(
+        self,
+        src_dir: str,
+        dist_dir: str,
+        not_found_dir: str,
+        except_dir: str,
+        filename_fmt: str,
+        threshold: int = 0,
+        user_agent: str = None,
+    ) -> None:
         self.src_dir = src_dir
         self.dist_dir = dist_dir
         self.not_found_dir = not_found_dir
@@ -151,30 +174,43 @@ class SaberConfig:
         self.threshold = threshold
         self.user_agent = user_agent
 
+
 class FileNameFmt(dict):
     def __missing__(self, key):
         return f"{key}"
-    
+
     def __getitem__(self, __key):
         r = super().__getitem__(__key)
         return "" if r is None else r
-    
+
     def __setitem__(self, __key, __value) -> None:
         if not isinstance(__key, str):
             raise IndexError
         return super().__setitem__(__key, __value)
 
-def context_to_record(ctx: SaberContext) -> SaberRecord:
-    return SaberRecord(str(ctx.hash), ctx.target.author, ctx.target.author_id, ctx.target.author_link, ctx.target.width, ctx.target.height, ctx.target.orig_link, ctx.dest_path, stat(ctx.dest_path).st_size)
 
-def format_filename(filename_fmt: str, target:Ascii2dResult) -> str:
-        d = {
-            'origin': target.origin.value,
-            'author': target.author,
-            'author_id': target.author_id,
-            'title': target.title,
-            'id': target.id,
-            'index': str(target.index)
-        }
-        fd = FileNameFmt(d)
-        return f'{filename_fmt.format_map(fd)}.{target.extension}'
+def context_to_record(ctx: SaberContext) -> SaberRecord:
+    return SaberRecord(
+        str(ctx.hash),
+        ctx.target.author,
+        ctx.target.author_id,
+        ctx.target.author_link,
+        ctx.target.width,
+        ctx.target.height,
+        ctx.target.orig_link,
+        ctx.dest_path,
+        stat(ctx.dest_path).st_size,
+    )
+
+
+def format_filename(filename_fmt: str, target: Ascii2dResult) -> str:
+    d = {
+        'origin': target.origin.value,
+        'author': target.author,
+        'author_id': target.author_id,
+        'title': target.title,
+        'id': target.id,
+        'index': str(target.index),
+    }
+    fd = FileNameFmt(d)
+    return f'{filename_fmt.format_map(fd)}.{target.extension}'

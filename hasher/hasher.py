@@ -1,10 +1,22 @@
 from __future__ import annotations
+
 from enum import Enum
-from imagehash import ImageHash, average_hash, phash, phash_simple, dhash, whash, colorhash, crop_resistant_hash
-from PIL import Image
 from os.path import isfile
 
-class Hasher():
+from imagehash import (
+    ImageHash,
+    average_hash,
+    colorhash,
+    crop_resistant_hash,
+    dhash,
+    phash,
+    phash_simple,
+    whash,
+)
+from PIL import Image
+
+
+class Hasher:
     def __init__(self, hash_alg: HashAlg, hash_size: int = 16) -> None:
         match hash_alg:
             case HashAlg.Average:
@@ -22,7 +34,7 @@ class Hasher():
             case HashAlg.CropResistant:
                 self.__hasher__ = crop_resistant_hash
         self.hash_size = hash_size
-    
+
     def hash(self, img: Image.Image) -> ImageHash | None:
         if isinstance(img, Image.Image):
             return self.__hasher__(img, self.hash_size)
@@ -31,6 +43,7 @@ class Hasher():
         if not isfile(img):
             return None
         return self.__hasher__(Image.open(img), self.hash_size)
+
 
 class HashAlg(Enum):
     Average = 'average'
@@ -47,6 +60,3 @@ class HashAlg(Enum):
             if o.value == s.lower():
                 return o
         raise ValueError
-
-if __name__ == "__main__":
-    pass

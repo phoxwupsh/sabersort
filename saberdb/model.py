@@ -1,8 +1,10 @@
 from __future__ import annotations
-from sqlalchemy.ext.declarative import declarative_base
+
 from sqlalchemy import Column, Integer, String
+from sqlalchemy.ext.declarative import declarative_base
 
 Base = declarative_base()
+
 
 class SaberRecord(Base):
     __tablename__ = 'saberdb'
@@ -17,7 +19,18 @@ class SaberRecord(Base):
     path = Column(String)
     size = Column(Integer)
 
-    def __init__(self, hash: str, author: str, author_id: str, author_link: str, width: int, height: int, origin_link: str, path: str, size: int) -> None:
+    def __init__(
+        self,
+        hash: str,
+        author: str,
+        author_id: str,
+        author_link: str,
+        width: int,
+        height: int,
+        origin_link: str,
+        path: str,
+        size: int,
+    ) -> None:
         self.hash = hash
         self.author = author
         self.author_id = author_id
@@ -27,6 +40,3 @@ class SaberRecord(Base):
         self.origin_link = origin_link
         self.path = path
         self.size = size
-
-if __name__ == '__main__':
-    pass

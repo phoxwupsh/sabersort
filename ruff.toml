@@ -1,0 +1,4 @@
+line-length = 255
+
+[per-file-ignores]
+"__init__.py" = ["F401"]

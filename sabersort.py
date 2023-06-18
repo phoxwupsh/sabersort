@@ -1,18 +1,18 @@
-from saber import Saber
-from saberdb import SaberDB, SaberDBConfig
-from hasher import Hasher, HashAlg
-from ascii2d import Ascii2d, Ascii2dConfig, OriginType, SortOrder
-from origins.pixiv import Pixiv, PixivConfig
-from origins.twitter import Twitter, TwitterConfig
-from saber import SaberConfig
 import asyncio
+
 import rtoml
 
+from ascii2d import Ascii2d, Ascii2dConfig, OriginType, SortOrder
+from hasher import HashAlg, Hasher
+from origins.pixiv import Pixiv, PixivConfig
+from origins.twitter import Twitter, TwitterConfig
+from saber import Saber, SaberConfig
+from saberdb import SaberDB, SaberDBConfig
 
 if __name__ == '__main__':
     with open('config.toml', 'r') as c:
         config = rtoml.load(c)
-    
+
     in_dir: str = config['sabersort']['input']
     out_dir: str = config['sabersort']['found']
     nf_dir: str = config['sabersort']['not_found']
@@ -37,14 +37,14 @@ if __name__ == '__main__':
     ascii2d = Ascii2d(ascii2d_cfg)
 
     phpsessid: str = config['pixiv']['PHPSESSID']
-    pixiv_cfg = PixivConfig(phpsessid,user_agent)
+    pixiv_cfg = PixivConfig(phpsessid, user_agent)
     pixiv = Pixiv(pixiv_cfg)
 
     auth_token: str = config['twitter']['auth_token']
     headless: bool = config['twitter']['headless']
     twitter_cfg = TwitterConfig(auth_token, user_agent, headless)
     twitter = Twitter(twitter_cfg)
-    
+
     saber = Saber(sabersort_cfg, ascii2d, hasher, db, pixiv, twitter)
-    
+
     asyncio.run(saber.sort())
