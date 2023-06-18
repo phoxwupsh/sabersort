@@ -13,10 +13,10 @@ from selenium.webdriver.chrome.webdriver import WebDriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support.wait import WebDriverWait
 from webdriver_manager.chrome import ChromeDriverManager
 
-from origin import DeletedException, Origin, OriginData
+from origins import DeletedException, Origin, OriginData
 
 NAMES = ['thumb', 'small', 'medium', 'large', 'orig']
 BLOCK_XPATH = '/html/body/div[1]/div/div/div[2]/main/div/div/div/div/div/section/div/div/div[1]/div/div/article/div/div/div[3]/div[3]/div/div/div/div/div[2]/div/div[2]'
@@ -29,9 +29,9 @@ DELETED_XPATH = '//a[contains(@href,"/search")]'
 class Twitter(Origin):
     def __init__(self, config: TwitterConfig) -> None:
         self.config = config
-        self.session = None
+        self.__session = None
         self.__driver_manager = ChromeDriverManager()
-        self.__driver: WebDriver = None
+        self.__driver = None
 
     def __get_driver(self) -> WebDriver:
         if self.__driver is None:
@@ -62,14 +62,14 @@ class Twitter(Origin):
         return self.__driver
 
     async def __get_session(self) -> ClientSession:
-        if self.session is None:
-            self.session = ClientSession()
+        if self.__session is None:
+            self.__session = ClientSession()
             if self.config.user_agent is not None:
-                self.session.headers.update({'user-agent': self.config.user_agent})
+                self.__session.headers.update({'user-agent': self.config.user_agent})
         asyncio_atexit.register(self.__cleanup)
-        return self.session
+        return self.__session
 
-    async def fetch_data(self, target: str) -> list[str] | None:
+    async def fetch_data(self, target: str) -> OriginData:
         driver = self.__get_driver()
         driver.get(target)
         WebDriverWait(driver, 30).until(
@@ -101,9 +101,10 @@ class Twitter(Origin):
             return BytesIO(buf)
 
     async def __cleanup(self):
-        if self.session is not None:
-            await self.session.close()
-        self.__driver.quit()
+        if self.__session is not None:
+            await self.__session.close()
+        if self.__driver is not None:
+            self.__driver.quit()
 
 
 def parse_twitter_url(url: str) -> TwitterUrls:
